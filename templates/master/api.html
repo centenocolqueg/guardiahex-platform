@@ -1,0 +1,883 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+
+    <meta
+        name="viewport"
+        content="width=device-width, initial-scale=1.0"
+    >
+
+    <title>GUARDIAHEXBOT | API Central</title>
+
+    <link
+        rel="stylesheet"
+        href="/static/css/style.css"
+    >
+</head>
+
+<body class="panel-page">
+
+    <!-- ==========================================
+         SIDEBAR
+    =========================================== -->
+
+    <aside
+        class="sidebar"
+        id="sidebar"
+    >
+
+        <div class="sidebar-brand">
+
+            <div class="sidebar-logo">
+                G
+            </div>
+
+            <div>
+                <h1>
+                    GUARDIA<span>HEX</span>
+                </h1>
+
+                <p>
+                    MASTER CONTROL
+                </p>
+            </div>
+
+        </div>
+
+
+        <div class="sidebar-status">
+
+            <span class="status-dot"></span>
+
+            <div>
+                <strong>
+                    SISTEMA ONLINE
+                </strong>
+
+                <small>
+                    MASTER NODE
+                </small>
+            </div>
+
+        </div>
+
+
+        <nav class="sidebar-nav">
+
+            <a
+                href="/master/dashboard"
+                class="nav-item"
+            >
+                <span>⌂</span>
+                DASHBOARD
+            </a>
+
+            <a
+                href="/master/socios"
+                class="nav-item"
+            >
+                <span>♛</span>
+                SOCIOS
+            </a>
+
+            <a
+                href="/master/bots"
+                class="nav-item"
+            >
+                <span>◉</span>
+                BOTS
+            </a>
+
+            <a
+                href="/master/versions"
+                class="nav-item"
+            >
+                <span>◆</span>
+                VERSIONES
+            </a>
+
+            <a
+                href="/master/commands"
+                class="nav-item"
+            >
+                <span>⌘</span>
+                COMANDOS
+            </a>
+
+            <a
+                href="/master/api"
+                class="nav-item active"
+            >
+                <span>⚡</span>
+                API CENTRAL
+            </a>
+
+        </nav>
+
+
+        <div class="sidebar-footer">
+
+            <div class="master-profile">
+
+                <div class="profile-avatar">
+                    S
+                </div>
+
+                <div>
+                    <strong>
+                        SUPERADMIN
+                    </strong>
+
+                    <small>
+                        CONTROL TOTAL
+                    </small>
+                </div>
+
+            </div>
+
+            <button
+                type="button"
+                id="logout-button"
+                class="btn-logout"
+            >
+                CERRAR SESIÓN
+            </button>
+
+        </div>
+
+    </aside>
+
+
+    <!-- ==========================================
+         CONTENIDO PRINCIPAL
+    =========================================== -->
+
+    <main class="panel-main">
+
+        <header class="topbar">
+
+            <div class="topbar-left">
+
+                <button
+                    type="button"
+                    class="menu-toggle"
+                    id="menu-toggle"
+                >
+                    ☰
+                </button>
+
+                <div>
+
+                    <span class="page-eyebrow">
+                        MASTER PANEL
+                    </span>
+
+                    <h2>
+                        API Central
+                    </h2>
+
+                </div>
+
+            </div>
+
+
+            <div class="topbar-right">
+
+                <div class="live-indicator">
+                    <span class="live-dot"></span>
+                    TIEMPO REAL
+                </div>
+
+                <div class="topbar-account">
+
+                    <span>
+                        SUPERADMIN
+                    </span>
+
+                    <strong>
+                        GUARDIAHEXBOT
+                    </strong>
+
+                </div>
+
+            </div>
+
+        </header>
+
+
+        <!-- ======================================
+             CONTENIDO
+        ======================================= -->
+
+        <section class="dashboard-content">
+
+            <div class="dashboard-heading">
+
+                <div>
+
+                    <span class="section-label">
+                        PROVIDER CONTROL
+                    </span>
+
+                    <h3>
+                        Conexión API Principal
+                    </h3>
+
+                    <p>
+                        Administra el estado, URL base y
+                        conexión del proveedor central.
+                    </p>
+
+                </div>
+
+                <button
+                    type="button"
+                    id="refresh-provider"
+                    class="btn-secondary"
+                >
+                    ↻ ACTUALIZAR
+                </button>
+
+            </div>
+
+
+            <!-- ==================================
+                 ESTADO GENERAL
+            =================================== -->
+
+            <div class="stats-grid">
+
+                <article class="stat-card">
+
+                    <div class="stat-card-top">
+
+                        <span class="stat-icon">
+                            ⚡
+                        </span>
+
+                        <span
+                            id="provider-enabled-badge"
+                            class="stat-state"
+                        >
+                            —
+                        </span>
+
+                    </div>
+
+                    <span class="stat-label">
+                        API CENTRAL
+                    </span>
+
+                    <strong
+                        id="provider-main-status"
+                        class="stat-value stat-value-text"
+                    >
+                        COMPROBANDO
+                    </strong>
+
+                </article>
+
+
+                <article class="stat-card">
+
+                    <div class="stat-card-top">
+
+                        <span class="stat-icon">
+                            ◆
+                        </span>
+
+                        <span class="stat-state">
+                            SECRET
+                        </span>
+
+                    </div>
+
+                    <span class="stat-label">
+                        TOKEN PRIVADO
+                    </span>
+
+                    <strong
+                        id="provider-token-status"
+                        class="stat-value stat-value-text"
+                    >
+                        —
+                    </strong>
+
+                    <small>
+                        Nunca se muestra en el navegador
+                    </small>
+
+                </article>
+
+
+                <article class="stat-card">
+
+                    <div class="stat-card-top">
+
+                        <span class="stat-icon">
+                            ◉
+                        </span>
+
+                        <span class="stat-state">
+                            HOST
+                        </span>
+
+                    </div>
+
+                    <span class="stat-label">
+                        URL BASE
+                    </span>
+
+                    <strong
+                        id="provider-url-status"
+                        class="stat-value stat-value-text"
+                    >
+                        —
+                    </strong>
+
+                </article>
+
+
+                <article class="stat-card">
+
+                    <div class="stat-card-top">
+
+                        <span class="stat-icon">
+                            ⏱
+                        </span>
+
+                        <span class="stat-state">
+                            NETWORK
+                        </span>
+
+                    </div>
+
+                    <span class="stat-label">
+                        TIMEOUT
+                    </span>
+
+                    <strong
+                        id="provider-timeout-status"
+                        class="stat-value"
+                    >
+                        —
+                    </strong>
+
+                    <small>
+                        segundos
+                    </small>
+
+                </article>
+
+            </div>
+
+
+            <!-- ==================================
+                 CONFIGURACIÓN
+            =================================== -->
+
+            <div class="dashboard-grid">
+
+                <section class="panel-card panel-card-large">
+
+                    <div class="panel-card-header">
+
+                        <div>
+
+                            <span class="section-label">
+                                PROVIDER SETTINGS
+                            </span>
+
+                            <h4>
+                                Configuración
+                            </h4>
+
+                        </div>
+
+                    </div>
+
+
+                    <form
+                        id="provider-config-form"
+                        class="panel-form"
+                    >
+
+                        <div class="form-grid">
+
+                            <!-- ESTADO -->
+
+                            <div class="form-group form-group-full">
+
+                                <label class="switch-row">
+
+                                    <span>
+                                        ACTIVAR API CENTRAL
+                                    </span>
+
+                                    <input
+                                        id="provider-enabled"
+                                        name="enabled"
+                                        type="checkbox"
+                                    >
+
+                                    <span class="switch-control"></span>
+
+                                </label>
+
+                                <small class="form-help">
+                                    Si está desactivada, ningún bot
+                                    ejecutará solicitudes al proveedor.
+                                </small>
+
+                            </div>
+
+
+                            <!-- URL -->
+
+                            <div class="form-group form-group-full">
+
+                                <label for="provider-base-url">
+                                    URL BASE
+                                </label>
+
+                                <input
+                                    id="provider-base-url"
+                                    name="base_url"
+                                    type="url"
+                                    maxlength="500"
+                                    placeholder="https://api.proveedor.com"
+                                >
+
+                                <small class="form-help">
+                                    Se configurará con la URL oficial
+                                    proporcionada por el proveedor.
+                                </small>
+
+                            </div>
+
+
+                            <!-- TIMEOUT -->
+
+                            <div class="form-group">
+
+                                <label for="provider-timeout">
+                                    TIMEOUT
+                                </label>
+
+                                <input
+                                    id="provider-timeout"
+                                    name="timeout"
+                                    type="number"
+                                    min="5"
+                                    max="120"
+                                    value="30"
+                                >
+
+                            </div>
+
+
+                            <!-- TOKEN -->
+
+                            <div class="form-group">
+
+                                <label>
+                                    TOKEN PRIVADO
+                                </label>
+
+                                <div
+                                    id="provider-secret-box"
+                                    class="secret-status-box"
+                                >
+
+                                    <span>
+                                        ●●●●●●●●●●●●
+                                    </span>
+
+                                    <strong
+                                        id="provider-secret-state"
+                                    >
+                                        COMPROBANDO
+                                    </strong>
+
+                                </div>
+
+                                <small class="form-help">
+                                    El secreto se configura directamente
+                                    en el VPS mediante variables privadas.
+                                </small>
+
+                            </div>
+
+                        </div>
+
+
+                        <div
+                            id="provider-form-alert"
+                            class="auth-alert"
+                            hidden
+                        ></div>
+
+
+                        <div class="panel-form-actions">
+
+                            <button
+                                type="submit"
+                                class="btn-primary"
+                            >
+                                GUARDAR CONFIGURACIÓN
+                            </button>
+
+                        </div>
+
+                    </form>
+
+                </section>
+
+
+                <!-- ==================================
+                     PRUEBA DE CONEXIÓN
+                =================================== -->
+
+                <section class="panel-card">
+
+                    <div class="panel-card-header">
+
+                        <div>
+
+                            <span class="section-label">
+                                CONNECTION TEST
+                            </span>
+
+                            <h4>
+                                Diagnóstico
+                            </h4>
+
+                        </div>
+
+                    </div>
+
+
+                    <div class="connection-monitor">
+
+                        <div
+                            id="provider-connection-icon"
+                            class="connection-icon"
+                        >
+                            ⚡
+                        </div>
+
+
+                        <strong
+                            id="provider-connection-title"
+                        >
+                            SIN PROBAR
+                        </strong>
+
+
+                        <p
+                            id="provider-connection-message"
+                        >
+                            Ejecuta una prueba para comprobar
+                            la conectividad con el servidor.
+                        </p>
+
+
+                        <div class="connection-details">
+
+                            <div>
+
+                                <span>
+                                    HTTP
+                                </span>
+
+                                <strong
+                                    id="provider-http-code"
+                                >
+                                    —
+                                </strong>
+
+                            </div>
+
+
+                            <div>
+
+                                <span>
+                                    LATENCIA
+                                </span>
+
+                                <strong
+                                    id="provider-latency"
+                                >
+                                    —
+                                </strong>
+
+                            </div>
+
+                        </div>
+
+
+                        <button
+                            type="button"
+                            id="test-provider"
+                            class="btn-secondary btn-full"
+                        >
+                            ⚡ PROBAR CONEXIÓN
+                        </button>
+
+                    </div>
+
+                </section>
+
+            </div>
+
+
+            <!-- ==================================
+                 SEGURIDAD
+            =================================== -->
+
+            <section class="panel-card">
+
+                <div class="panel-card-header">
+
+                    <div>
+
+                        <span class="section-label">
+                            SECURITY LAYER
+                        </span>
+
+                        <h4>
+                            Protección de credenciales
+                        </h4>
+
+                    </div>
+
+                </div>
+
+
+                <div class="security-grid">
+
+                    <div class="security-item">
+
+                        <span class="security-icon">
+                            ◆
+                        </span>
+
+                        <div>
+
+                            <strong>
+                                TOKEN FUERA DE GITHUB
+                            </strong>
+
+                            <p>
+                                Las credenciales privadas no se
+                                almacenan dentro del repositorio.
+                            </p>
+
+                        </div>
+
+                    </div>
+
+
+                    <div class="security-item">
+
+                        <span class="security-icon">
+                            ◉
+                        </span>
+
+                        <div>
+
+                            <strong>
+                                SOLO SUPERADMIN
+                            </strong>
+
+                            <p>
+                                Esta configuración no está disponible
+                                para los paneles de socios.
+                            </p>
+
+                        </div>
+
+                    </div>
+
+
+                    <div class="security-item">
+
+                        <span class="security-icon">
+                            ⛨
+                        </span>
+
+                        <div>
+
+                            <strong>
+                                AUDITORÍA
+                            </strong>
+
+                            <p>
+                                Los cambios de configuración quedan
+                                registrados en el historial interno.
+                            </p>
+
+                        </div>
+
+                    </div>
+
+
+                    <div class="security-item">
+
+                        <span class="security-icon">
+                            ↻
+                        </span>
+
+                        <div>
+
+                            <strong>
+                                CAMBIOS EN TIEMPO REAL
+                            </strong>
+
+                            <p>
+                                El estado del proveedor se refleja
+                                inmediatamente en el panel MASTER.
+                            </p>
+
+                        </div>
+
+                    </div>
+
+                </div>
+
+            </section>
+
+
+            <!-- ==================================
+                 ESTADO INTERNO
+            =================================== -->
+
+            <section class="panel-card">
+
+                <div class="panel-card-header">
+
+                    <div>
+
+                        <span class="section-label">
+                            API STATE
+                        </span>
+
+                        <h4>
+                            Estado interno
+                        </h4>
+
+                    </div>
+
+                </div>
+
+
+                <div class="system-monitor">
+
+                    <div class="monitor-row">
+
+                        <span>
+                            Proveedor
+                        </span>
+
+                        <strong id="internal-provider-name">
+                            FUENTESDATA
+                        </strong>
+
+                    </div>
+
+
+                    <div class="monitor-row">
+
+                        <span>
+                            API habilitada
+                        </span>
+
+                        <strong
+                            id="internal-provider-enabled"
+                            class="status-pending"
+                        >
+                            —
+                        </strong>
+
+                    </div>
+
+
+                    <div class="monitor-row">
+
+                        <span>
+                            URL configurada
+                        </span>
+
+                        <strong
+                            id="internal-provider-url"
+                            class="status-pending"
+                        >
+                            —
+                        </strong>
+
+                    </div>
+
+
+                    <div class="monitor-row">
+
+                        <span>
+                            Token configurado
+                        </span>
+
+                        <strong
+                            id="internal-provider-token"
+                            class="status-pending"
+                        >
+                            —
+                        </strong>
+
+                    </div>
+
+
+                    <div class="monitor-row">
+
+                        <span>
+                            Lista para operar
+                        </span>
+
+                        <strong
+                            id="internal-provider-ready"
+                            class="status-pending"
+                        >
+                            —
+                        </strong>
+
+                    </div>
+
+                </div>
+
+            </section>
+
+
+            <!-- ==================================
+                 FOOTER
+            =================================== -->
+
+            <footer class="panel-footer">
+
+                <span>
+                    GUARDIAHEXBOT PLATFORM
+                </span>
+
+                <span>
+                    API CONTROL • SUPERADMIN
+                </span>
+
+            </footer>
+
+        </section>
+
+    </main>
+
+
+    <script src="/static/js/app.js"></script>
+    <script src="/static/js/realtime.js"></script>
+
+</body>
+</html>
