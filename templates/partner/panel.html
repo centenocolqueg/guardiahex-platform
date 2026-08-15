@@ -1,0 +1,662 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+
+    <meta
+        name="viewport"
+        content="width=device-width, initial-scale=1.0"
+    >
+
+    <meta
+        name="description"
+        content="Panel de socio GUARDIAHEXBOT PLATFORM"
+    >
+
+    <title>GUARDIAHEXBOT | Partner Panel</title>
+
+    <link
+        rel="stylesheet"
+        href="/static/css/style.css"
+    >
+</head>
+
+<body class="partner-page">
+
+    <div class="cyber-background">
+        <div class="cyber-grid"></div>
+        <div class="cyber-glow cyber-glow-one"></div>
+        <div class="cyber-glow cyber-glow-two"></div>
+    </div>
+
+    <main class="partner-wrapper">
+
+        <header class="partner-header">
+
+            <div class="partner-brand">
+
+                <div class="sidebar-logo">
+                    G
+                </div>
+
+                <div>
+
+                    <h1>
+                        GUARDIA<span>HEX</span>
+                    </h1>
+
+                    <p>
+                        PARTNER CONTROL
+                    </p>
+
+                </div>
+
+            </div>
+
+            <div class="partner-header-actions">
+
+                <div class="live-indicator">
+
+                    <span class="live-dot"></span>
+
+                    TIEMPO REAL
+
+                </div>
+
+                <button
+                    type="button"
+                    id="logout-button"
+                    class="btn-logout"
+                >
+                    SALIR
+                </button>
+
+            </div>
+
+        </header>
+
+        <section class="partner-welcome">
+
+            <div>
+
+                <span class="section-label">
+                    PARTNER PANEL
+                </span>
+
+                <h2 id="partner-display-name">
+                    Panel de Socio
+                </h2>
+
+                <p>
+                    Administración operativa de tu bot.
+                </p>
+
+            </div>
+
+            <div class="partner-security-badge">
+
+                <span>⛨</span>
+
+                <div>
+
+                    <strong>
+                        ACCESO AISLADO
+                    </strong>
+
+                    <small>
+                        Solo tu configuración
+                    </small>
+
+                </div>
+
+            </div>
+
+        </section>
+
+        <section
+            id="partner-bot-selector-card"
+            class="panel-card"
+        >
+
+            <div class="panel-card-header">
+
+                <div>
+
+                    <span class="section-label">
+                        MY BOT
+                    </span>
+
+                    <h3>
+                        Seleccionar bot
+                    </h3>
+
+                </div>
+
+            </div>
+
+            <div class="form-group">
+
+                <label for="partner-bot-select">
+                    BOT ASIGNADO
+                </label>
+
+                <select
+                    id="partner-bot-select"
+                    class="select-control"
+                >
+
+                    <option value="">
+                        Cargando bots...
+                    </option>
+
+                </select>
+
+            </div>
+
+        </section>
+
+        <section
+            id="partner-bot-panel"
+            hidden
+        >
+
+            <section class="partner-bot-hero panel-card">
+
+                <div class="partner-bot-main">
+
+                    <div class="partner-bot-avatar">
+                        ◉
+                    </div>
+
+                    <div class="partner-bot-info">
+
+                        <span class="section-label">
+                            TELEGRAM BOT
+                        </span>
+
+                        <h2 id="partner-bot-name">
+                            —
+                        </h2>
+
+                        <p id="partner-bot-username">
+                            —
+                        </p>
+
+                    </div>
+
+                </div>
+
+                <div class="partner-bot-state">
+
+                    <span
+                        id="partner-bot-status-dot"
+                        class="status-dot"
+                    ></span>
+
+                    <div>
+
+                        <small>
+                            ESTADO
+                        </small>
+
+                        <strong id="partner-bot-status">
+                            —
+                        </strong>
+
+                    </div>
+
+                </div>
+
+            </section>
+
+            <div class="stats-grid partner-stats-grid">
+
+                <article class="stat-card">
+
+                    <span class="stat-label">
+                        VERSIÓN
+                    </span>
+
+                    <strong
+                        id="partner-bot-version"
+                        class="stat-value stat-value-text"
+                    >
+                        —
+                    </strong>
+
+                    <small>
+                        Gestionada por SUPERADMIN
+                    </small>
+
+                </article>
+
+                <article class="stat-card">
+
+                    <span class="stat-label">
+                        USUARIOS
+                    </span>
+
+                    <strong
+                        id="partner-stat-users"
+                        class="stat-value"
+                    >
+                        —
+                    </strong>
+
+                </article>
+
+                <article class="stat-card">
+
+                    <span class="stat-label">
+                        CONSULTAS HOY
+                    </span>
+
+                    <strong
+                        id="partner-stat-queries"
+                        class="stat-value"
+                    >
+                        —
+                    </strong>
+
+                </article>
+
+                <article class="stat-card">
+
+                    <span class="stat-label">
+                        CRÉDITOS
+                    </span>
+
+                    <strong
+                        id="partner-stat-credits"
+                        class="stat-value"
+                    >
+                        —
+                    </strong>
+
+                </article>
+
+            </div>
+
+            <section class="panel-card">
+
+                <div class="panel-card-header">
+
+                    <div>
+
+                        <span class="section-label">
+                            BOT POWER
+                        </span>
+
+                        <h3>
+                            Estado del bot
+                        </h3>
+
+                    </div>
+
+                </div>
+
+                <div class="partner-power-control">
+
+                    <div>
+
+                        <strong id="partner-power-title">
+                            Bot
+                        </strong>
+
+                        <p>
+                            Puedes encender o apagar tu bot
+                            desde este panel.
+                        </p>
+
+                    </div>
+
+                    <button
+                        type="button"
+                        id="partner-toggle-bot"
+                        class="btn-primary"
+                    >
+                        COMPROBANDO...
+                    </button>
+
+                </div>
+
+                <div
+                    id="partner-power-alert"
+                    class="auth-alert"
+                    hidden
+                ></div>
+
+            </section>
+
+            <section class="panel-card">
+
+                <div class="panel-card-header">
+
+                    <div>
+
+                        <span class="section-label">
+                            COMMUNITY
+                        </span>
+
+                        <h3>
+                            Canal y Grupo
+                        </h3>
+
+                    </div>
+
+                </div>
+
+                <form
+                    id="partner-links-form"
+                    class="panel-form"
+                >
+
+                    <div class="form-grid">
+
+                        <div class="form-group form-group-full">
+
+                            <label for="partner-channel-url">
+                                📢 CANAL
+                            </label>
+
+                            <input
+                                id="partner-channel-url"
+                                type="url"
+                                maxlength="255"
+                                placeholder="https://t.me/..."
+                            >
+
+                            <small class="form-help">
+                                Enlace oficial mostrado por tu bot.
+                            </small>
+
+                        </div>
+
+                        <div class="form-group form-group-full">
+
+                            <label for="partner-group-url">
+                                👥 GRUPO
+                            </label>
+
+                            <input
+                                id="partner-group-url"
+                                type="url"
+                                maxlength="255"
+                                placeholder="https://t.me/..."
+                            >
+
+                            <small class="form-help">
+                                Grupo oficial asociado a tu bot.
+                            </small>
+
+                        </div>
+
+                    </div>
+
+                    <div
+                        id="partner-links-alert"
+                        class="auth-alert"
+                        hidden
+                    ></div>
+
+                    <div class="panel-form-actions">
+
+                        <button
+                            type="submit"
+                            class="btn-primary"
+                        >
+                            GUARDAR ENLACES
+                        </button>
+
+                    </div>
+
+                </form>
+
+            </section>
+
+            <section class="panel-card">
+
+                <div class="panel-card-header">
+
+                    <div>
+
+                        <span class="section-label">
+                            OFFICIAL STAFF
+                        </span>
+
+                        <h3>
+                            Fundadores y Cofundadores
+                        </h3>
+
+                        <p>
+                            Máximo 4 contactos oficiales.
+                        </p>
+
+                    </div>
+
+                </div>
+
+                <div
+                    id="partner-founders-list"
+                    class="founders-grid"
+                >
+
+                    <div class="empty-state">
+
+                        <span class="loader"></span>
+
+                        <p>
+                            Cargando contactos...
+                        </p>
+
+                    </div>
+
+                </div>
+
+                <form
+                    id="partner-founder-form"
+                    class="panel-form partner-founder-form"
+                >
+
+                    <div class="form-grid">
+
+                        <div class="form-group">
+
+                            <label for="partner-founder-id">
+                                TELEGRAM ID
+                            </label>
+
+                            <input
+                                id="partner-founder-id"
+                                type="number"
+                                placeholder="123456789"
+                                required
+                            >
+
+                        </div>
+
+                        <div class="form-group">
+
+                            <label for="partner-founder-role">
+                                ROL
+                            </label>
+
+                            <select
+                                id="partner-founder-role"
+                                class="select-control"
+                                required
+                            >
+
+                                <option value="FUNDADOR">
+                                    👑 FUNDADOR
+                                </option>
+
+                                <option value="COFUNDADOR">
+                                    🤝 COFUNDADOR
+                                </option>
+
+                            </select>
+
+                        </div>
+
+                    </div>
+
+                    <div
+                        id="partner-founder-alert"
+                        class="auth-alert"
+                        hidden
+                    ></div>
+
+                    <div class="panel-form-actions">
+
+                        <button
+                            type="submit"
+                            class="btn-secondary"
+                        >
+                            ＋ AGREGAR CONTACTO
+                        </button>
+
+                    </div>
+
+                </form>
+
+            </section>
+
+            <section class="panel-card partner-info-card">
+
+                <div class="security-grid">
+
+                    <div class="security-item">
+
+                        <span class="security-icon">
+                            ◆
+                        </span>
+
+                        <div>
+
+                            <strong>
+                                VERSIÓN PROTEGIDA
+                            </strong>
+
+                            <p>
+                                La versión V1–V5 es administrada
+                                únicamente por SUPERADMIN.
+                            </p>
+
+                        </div>
+
+                    </div>
+
+                    <div class="security-item">
+
+                        <span class="security-icon">
+                            ⌘
+                        </span>
+
+                        <div>
+
+                            <strong>
+                                CMD PROTEGIDOS
+                            </strong>
+
+                            <p>
+                                Los comandos y sus precios no
+                                pueden modificarse desde este panel.
+                            </p>
+
+                        </div>
+
+                    </div>
+
+                    <div class="security-item">
+
+                        <span class="security-icon">
+                            ⚡
+                        </span>
+
+                        <div>
+
+                            <strong>
+                                API CENTRAL
+                            </strong>
+
+                            <p>
+                                La configuración del proveedor
+                                pertenece al sistema MASTER.
+                            </p>
+
+                        </div>
+
+                    </div>
+
+                    <div class="security-item">
+
+                        <span class="security-icon">
+                            ⛨
+                        </span>
+
+                        <div>
+
+                            <strong>
+                                AUDITORÍA ACTIVA
+                            </strong>
+
+                            <p>
+                                Los cambios realizados desde
+                                este panel quedan registrados.
+                            </p>
+
+                        </div>
+
+                    </div>
+
+                </div>
+
+            </section>
+
+        </section>
+
+        <section
+            id="partner-no-bots"
+            class="panel-card"
+            hidden
+        >
+
+            <div class="empty-state">
+
+                <span class="partner-empty-icon">
+                    ◉
+                </span>
+
+                <h3>
+                    No tienes bots asignados
+                </h3>
+
+                <p>
+                    Contacta con la administración de
+                    GUARDIAHEXBOT.
+                </p>
+
+            </div>
+
+        </section>
+
+        <footer class="panel-footer">
+
+            <span>
+                GUARDIAHEXBOT PLATFORM
+            </span>
+
+            <span>
+                PARTNER CONTROL • v1.0
+            </span>
+
+        </footer>
+
+    </main>
+
+    <script src="/static/js/app.js"></script>
+    <script src="/static/js/realtime.js"></script>
+
+</body>
+</html>
