@@ -1,0 +1,1206 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+
+    <meta
+        name="viewport"
+        content="width=device-width, initial-scale=1.0"
+    >
+
+    <title>GUARDIAHEXBOT | Comandos</title>
+
+    <link
+        rel="stylesheet"
+        href="/static/css/style.css"
+    >
+</head>
+
+<body class="panel-page">
+
+    <!-- ==========================================
+         SIDEBAR
+    =========================================== -->
+
+    <aside
+        class="sidebar"
+        id="sidebar"
+    >
+
+        <div class="sidebar-brand">
+
+            <div class="sidebar-logo">
+                G
+            </div>
+
+            <div>
+                <h1>
+                    GUARDIA<span>HEX</span>
+                </h1>
+
+                <p>
+                    MASTER CONTROL
+                </p>
+            </div>
+
+        </div>
+
+
+        <div class="sidebar-status">
+
+            <span class="status-dot"></span>
+
+            <div>
+                <strong>
+                    SISTEMA ONLINE
+                </strong>
+
+                <small>
+                    MASTER NODE
+                </small>
+            </div>
+
+        </div>
+
+
+        <nav class="sidebar-nav">
+
+            <a
+                href="/master/dashboard"
+                class="nav-item"
+            >
+                <span>⌂</span>
+                DASHBOARD
+            </a>
+
+            <a
+                href="/master/socios"
+                class="nav-item"
+            >
+                <span>♛</span>
+                SOCIOS
+            </a>
+
+            <a
+                href="/master/bots"
+                class="nav-item"
+            >
+                <span>◉</span>
+                BOTS
+            </a>
+
+            <a
+                href="/master/versions"
+                class="nav-item"
+            >
+                <span>◆</span>
+                VERSIONES
+            </a>
+
+            <a
+                href="/master/commands"
+                class="nav-item active"
+            >
+                <span>⌘</span>
+                COMANDOS
+            </a>
+
+            <a
+                href="/master/api"
+                class="nav-item"
+            >
+                <span>⚡</span>
+                API CENTRAL
+            </a>
+
+        </nav>
+
+
+        <div class="sidebar-footer">
+
+            <div class="master-profile">
+
+                <div class="profile-avatar">
+                    S
+                </div>
+
+                <div>
+                    <strong>
+                        SUPERADMIN
+                    </strong>
+
+                    <small>
+                        CONTROL TOTAL
+                    </small>
+                </div>
+
+            </div>
+
+            <button
+                type="button"
+                id="logout-button"
+                class="btn-logout"
+            >
+                CERRAR SESIÓN
+            </button>
+
+        </div>
+
+    </aside>
+
+
+    <!-- ==========================================
+         CONTENIDO
+    =========================================== -->
+
+    <main class="panel-main">
+
+        <header class="topbar">
+
+            <div class="topbar-left">
+
+                <button
+                    type="button"
+                    class="menu-toggle"
+                    id="menu-toggle"
+                >
+                    ☰
+                </button>
+
+                <div>
+
+                    <span class="page-eyebrow">
+                        MASTER PANEL
+                    </span>
+
+                    <h2>
+                        Control de Comandos
+                    </h2>
+
+                </div>
+
+            </div>
+
+
+            <div class="topbar-right">
+
+                <div class="live-indicator">
+                    <span class="live-dot"></span>
+                    TIEMPO REAL
+                </div>
+
+                <div class="topbar-account">
+
+                    <span>
+                        SUPERADMIN
+                    </span>
+
+                    <strong>
+                        GUARDIAHEXBOT
+                    </strong>
+
+                </div>
+
+            </div>
+
+        </header>
+
+
+        <!-- ======================================
+             CONTENIDO
+        ======================================= -->
+
+        <section class="dashboard-content">
+
+            <div class="dashboard-heading">
+
+                <div>
+
+                    <span class="section-label">
+                        COMMAND ENGINE
+                    </span>
+
+                    <h3>
+                        Catálogo Maestro
+                    </h3>
+
+                    <p>
+                        Configura categorías, niveles,
+                        precios, versiones y estado
+                        de los CMD.
+                    </p>
+
+                </div>
+
+                <button
+                    type="button"
+                    id="open-create-command"
+                    class="btn-primary"
+                >
+                    ＋ CREAR CMD
+                </button>
+
+            </div>
+
+
+            <!-- ==================================
+                 ESTADÍSTICAS
+            =================================== -->
+
+            <div class="stats-grid">
+
+                <article class="stat-card">
+
+                    <span class="stat-label">
+                        CMD TOTALES
+                    </span>
+
+                    <strong
+                        id="commands-total"
+                        class="stat-value"
+                    >
+                        —
+                    </strong>
+
+                </article>
+
+
+                <article class="stat-card">
+
+                    <span class="stat-label">
+                        OPERATIVOS
+                    </span>
+
+                    <strong
+                        id="commands-enabled"
+                        class="stat-value"
+                    >
+                        —
+                    </strong>
+
+                </article>
+
+
+                <article class="stat-card">
+
+                    <span class="stat-label">
+                        DESACTIVADOS
+                    </span>
+
+                    <strong
+                        id="commands-disabled"
+                        class="stat-value"
+                    >
+                        —
+                    </strong>
+
+                </article>
+
+
+                <article class="stat-card">
+
+                    <span class="stat-label">
+                        CATEGORÍAS
+                    </span>
+
+                    <strong
+                        id="commands-categories"
+                        class="stat-value"
+                    >
+                        19
+                    </strong>
+
+                </article>
+
+            </div>
+
+
+            <!-- ==================================
+                 FILTROS
+            =================================== -->
+
+            <section class="panel-card">
+
+                <div class="panel-toolbar">
+
+                    <div class="search-box">
+
+                        <span>
+                            ⌕
+                        </span>
+
+                        <input
+                            type="search"
+                            id="commands-search"
+                            placeholder="Buscar comando, servicio o categoría..."
+                        >
+
+                    </div>
+
+
+                    <select
+                        id="commands-category-filter"
+                        class="select-control"
+                    >
+
+                        <option value="">
+                            TODAS LAS CATEGORÍAS
+                        </option>
+
+                        <option value="RENIEC">
+                            RENIEC
+                        </option>
+
+                        <option value="TELEFONIA">
+                            TELEFONÍA
+                        </option>
+
+                        <option value="JUSTICIA">
+                            JUSTICIA
+                        </option>
+
+                        <option value="SUNAT">
+                            SUNAT
+                        </option>
+
+                        <option value="SUNARP">
+                            SUNARP
+                        </option>
+
+                        <option value="VEHICULOS">
+                            VEHÍCULOS
+                        </option>
+
+                        <option value="CERTIFICADOS">
+                            CERTIFICADOS
+                        </option>
+
+                        <option value="ESTUDIOS">
+                            ESTUDIOS
+                        </option>
+
+                        <option value="FAMILIA">
+                            FAMILIA
+                        </option>
+
+                        <option value="FINANCIERO">
+                            FINANCIERO
+                        </option>
+
+                        <option value="SEEKER">
+                            SEEKER
+                        </option>
+
+                        <option value="MTC">
+                            MTC
+                        </option>
+
+                        <option value="ACTAS">
+                            ACTAS
+                        </option>
+
+                        <option value="VOUCHER">
+                            VOUCHER
+                        </option>
+
+                        <option value="INTEL_X">
+                            INTEL X
+                        </option>
+
+                        <option value="VIP">
+                            VIP
+                        </option>
+
+                        <option value="INTERNACIONAL">
+                            INTERNACIONAL
+                        </option>
+
+                        <option value="SELLER">
+                            SELLER
+                        </option>
+
+                        <option value="CONSULTAS_MASIVAS">
+                            CONSULTAS MASIVAS
+                        </option>
+
+                    </select>
+
+
+                    <select
+                        id="commands-status-filter"
+                        class="select-control"
+                    >
+
+                        <option value="">
+                            TODOS LOS ESTADOS
+                        </option>
+
+                        <option value="enabled">
+                            OPERATIVOS
+                        </option>
+
+                        <option value="disabled">
+                            DESACTIVADOS
+                        </option>
+
+                    </select>
+
+
+                    <button
+                        type="button"
+                        id="refresh-commands"
+                        class="btn-secondary"
+                    >
+                        ↻ ACTUALIZAR
+                    </button>
+
+                </div>
+
+            </section>
+
+
+            <!-- ==================================
+                 TABLA DE CMD
+            =================================== -->
+
+            <section class="panel-card">
+
+                <div class="panel-card-header">
+
+                    <div>
+
+                        <span class="section-label">
+                            COMMAND DATABASE
+                        </span>
+
+                        <h4>
+                            Comandos registrados
+                        </h4>
+
+                    </div>
+
+                </div>
+
+
+                <div class="table-responsive">
+
+                    <table class="data-table">
+
+                        <thead>
+
+                            <tr>
+
+                                <th>
+                                    CMD
+                                </th>
+
+                                <th>
+                                    SERVICIO
+                                </th>
+
+                                <th>
+                                    CATEGORÍA
+                                </th>
+
+                                <th>
+                                    NIVEL
+                                </th>
+
+                                <th>
+                                    PRECIO
+                                </th>
+
+                                <th>
+                                    VERSIONES
+                                </th>
+
+                                <th>
+                                    ESTADO
+                                </th>
+
+                                <th>
+                                    ACCIONES
+                                </th>
+
+                            </tr>
+
+                        </thead>
+
+
+                        <tbody id="commands-table-body">
+
+                            <tr>
+
+                                <td
+                                    colspan="8"
+                                    class="table-loading"
+                                >
+
+                                    <span class="loader"></span>
+
+                                    Cargando comandos...
+
+                                </td>
+
+                            </tr>
+
+                        </tbody>
+
+                    </table>
+
+                </div>
+
+            </section>
+
+
+            <!-- ==================================
+                 CONTROL POR BOT
+            =================================== -->
+
+            <section class="panel-card">
+
+                <div class="panel-card-header">
+
+                    <div>
+
+                        <span class="section-label">
+                            BOT OVERRIDES
+                        </span>
+
+                        <h4>
+                            Configuración particular por bot
+                        </h4>
+
+                    </div>
+
+                </div>
+
+
+                <div class="form-grid">
+
+                    <div class="form-group">
+
+                        <label for="command-bot-select">
+                            SELECCIONAR BOT
+                        </label>
+
+                        <select
+                            id="command-bot-select"
+                            class="select-control"
+                        >
+                            <option value="">
+                                Seleccionar bot
+                            </option>
+                        </select>
+
+                    </div>
+
+                </div>
+
+
+                <div
+                    id="bot-command-overrides"
+                    class="override-container"
+                >
+
+                    <div class="empty-state">
+
+                        <p>
+                            Selecciona un bot para ver
+                            sus configuraciones particulares.
+                        </p>
+
+                    </div>
+
+                </div>
+
+            </section>
+
+
+            <!-- ==================================
+                 MODAL CREAR CMD
+            =================================== -->
+
+            <div
+                id="create-command-modal"
+                class="modal"
+                hidden
+            >
+
+                <div class="modal-backdrop"></div>
+
+                <div class="modal-card">
+
+                    <div class="modal-header">
+
+                        <div>
+
+                            <span class="section-label">
+                                NEW COMMAND
+                            </span>
+
+                            <h4>
+                                Crear comando
+                            </h4>
+
+                        </div>
+
+
+                        <button
+                            type="button"
+                            id="close-create-command"
+                            class="modal-close"
+                        >
+                            ×
+                        </button>
+
+                    </div>
+
+
+                    <form
+                        id="create-command-form"
+                        class="panel-form"
+                    >
+
+                        <div class="form-grid">
+
+                            <div class="form-group">
+
+                                <label for="cmd-code">
+                                    CÓDIGO INTERNO
+                                </label>
+
+                                <input
+                                    id="cmd-code"
+                                    name="code"
+                                    type="text"
+                                    maxlength="80"
+                                    placeholder="SERVICE_01"
+                                    required
+                                >
+
+                            </div>
+
+
+                            <div class="form-group">
+
+                                <label for="cmd-command">
+                                    COMANDO
+                                </label>
+
+                                <input
+                                    id="cmd-command"
+                                    name="command"
+                                    type="text"
+                                    maxlength="80"
+                                    placeholder="/servicio"
+                                    required
+                                >
+
+                            </div>
+
+
+                            <div class="form-group">
+
+                                <label for="cmd-title">
+                                    NOMBRE DEL SERVICIO
+                                </label>
+
+                                <input
+                                    id="cmd-title"
+                                    name="title"
+                                    type="text"
+                                    maxlength="160"
+                                    required
+                                >
+
+                            </div>
+
+
+                            <div class="form-group">
+
+                                <label for="cmd-category">
+                                    CATEGORÍA
+                                </label>
+
+                                <input
+                                    id="cmd-category"
+                                    name="category"
+                                    type="text"
+                                    maxlength="60"
+                                    required
+                                >
+
+                            </div>
+
+
+                            <div class="form-group">
+
+                                <label for="cmd-level">
+                                    NIVEL
+                                </label>
+
+                                <input
+                                    id="cmd-level"
+                                    name="level"
+                                    type="text"
+                                    maxlength="50"
+                                    value="PROFESIONAL"
+                                    required
+                                >
+
+                            </div>
+
+
+                            <div class="form-group">
+
+                                <label for="cmd-price">
+                                    PRECIO EN CRÉDITOS
+                                </label>
+
+                                <input
+                                    id="cmd-price"
+                                    name="price"
+                                    type="number"
+                                    min="0"
+                                    max="100000"
+                                    value="1"
+                                    required
+                                >
+
+                            </div>
+
+
+                            <div class="form-group">
+
+                                <label for="cmd-result-type">
+                                    TIPO DE RESULTADO
+                                </label>
+
+                                <select
+                                    id="cmd-result-type"
+                                    name="result_type"
+                                    class="select-control"
+                                >
+
+                                    <option value="TEXT">
+                                        TEXT
+                                    </option>
+
+                                    <option value="IMAGE">
+                                        IMAGE
+                                    </option>
+
+                                    <option value="PDF">
+                                        PDF
+                                    </option>
+
+                                    <option value="FILE">
+                                        FILE
+                                    </option>
+
+                                    <option value="MULTI">
+                                        MULTI
+                                    </option>
+
+                                    <option value="JSON">
+                                        JSON
+                                    </option>
+
+                                </select>
+
+                            </div>
+
+
+                            <div class="form-group">
+
+                                <label for="cmd-provider-key">
+                                    PROVIDER KEY
+                                </label>
+
+                                <input
+                                    id="cmd-provider-key"
+                                    name="provider_key"
+                                    type="text"
+                                    maxlength="120"
+                                    placeholder="Se configura según documentación autorizada"
+                                >
+
+                            </div>
+
+
+                            <div class="form-group form-group-full">
+
+                                <label for="cmd-description">
+                                    DESCRIPCIÓN
+                                </label>
+
+                                <textarea
+                                    id="cmd-description"
+                                    name="description"
+                                    rows="3"
+                                ></textarea>
+
+                            </div>
+
+
+                            <div class="form-group form-group-full">
+
+                                <label for="cmd-result-description">
+                                    DESCRIPCIÓN DEL RESULTADO
+                                </label>
+
+                                <textarea
+                                    id="cmd-result-description"
+                                    name="result_description"
+                                    rows="3"
+                                ></textarea>
+
+                            </div>
+
+
+                            <div class="form-group form-group-full">
+
+                                <label>
+                                    VERSIONES HABILITADAS
+                                </label>
+
+                                <div class="checkbox-grid">
+
+                                    <label>
+                                        <input
+                                            type="checkbox"
+                                            name="available_versions"
+                                            value="V1"
+                                        >
+                                        V1
+                                    </label>
+
+                                    <label>
+                                        <input
+                                            type="checkbox"
+                                            name="available_versions"
+                                            value="V2"
+                                        >
+                                        V2
+                                    </label>
+
+                                    <label>
+                                        <input
+                                            type="checkbox"
+                                            name="available_versions"
+                                            value="V3"
+                                        >
+                                        V3
+                                    </label>
+
+                                    <label>
+                                        <input
+                                            type="checkbox"
+                                            name="available_versions"
+                                            value="V4"
+                                        >
+                                        V4
+                                    </label>
+
+                                    <label>
+                                        <input
+                                            type="checkbox"
+                                            name="available_versions"
+                                            value="V5"
+                                        >
+                                        V5
+                                    </label>
+
+                                </div>
+
+                            </div>
+
+
+                            <div class="form-group form-group-full">
+
+                                <label class="switch-row">
+
+                                    <span>
+                                        CMD OPERATIVO
+                                    </span>
+
+                                    <input
+                                        id="cmd-enabled"
+                                        name="enabled_global"
+                                        type="checkbox"
+                                        checked
+                                    >
+
+                                    <span class="switch-control"></span>
+
+                                </label>
+
+                            </div>
+
+
+                            <div class="form-group form-group-full">
+
+                                <label class="switch-row">
+
+                                    <span>
+                                        COBRAR SI NO HAY RESULTADOS
+                                    </span>
+
+                                    <input
+                                        id="cmd-charge-no-results"
+                                        name="charge_on_no_results"
+                                        type="checkbox"
+                                        checked
+                                    >
+
+                                    <span class="switch-control"></span>
+
+                                </label>
+
+                            </div>
+
+                        </div>
+
+
+                        <div
+                            id="command-form-alert"
+                            class="auth-alert"
+                            hidden
+                        ></div>
+
+
+                        <div class="modal-actions">
+
+                            <button
+                                type="button"
+                                id="cancel-create-command"
+                                class="btn-secondary"
+                            >
+                                CANCELAR
+                            </button>
+
+                            <button
+                                type="submit"
+                                class="btn-primary"
+                            >
+                                CREAR CMD
+                            </button>
+
+                        </div>
+
+                    </form>
+
+                </div>
+
+            </div>
+
+
+            <!-- ==================================
+                 MODAL EDITAR CMD
+            =================================== -->
+
+            <div
+                id="edit-command-modal"
+                class="modal"
+                hidden
+            >
+
+                <div class="modal-backdrop"></div>
+
+                <div class="modal-card">
+
+                    <div class="modal-header">
+
+                        <div>
+
+                            <span class="section-label">
+                                COMMAND EDITOR
+                            </span>
+
+                            <h4 id="edit-command-title">
+                                Editar comando
+                            </h4>
+
+                        </div>
+
+
+                        <button
+                            type="button"
+                            id="close-edit-command"
+                            class="modal-close"
+                        >
+                            ×
+                        </button>
+
+                    </div>
+
+
+                    <form
+                        id="edit-command-form"
+                        class="panel-form"
+                    >
+
+                        <input
+                            type="hidden"
+                            id="edit-command-id"
+                        >
+
+
+                        <div class="form-grid">
+
+                            <div class="form-group">
+
+                                <label for="edit-command-name">
+                                    COMANDO
+                                </label>
+
+                                <input
+                                    id="edit-command-name"
+                                    type="text"
+                                    maxlength="80"
+                                >
+
+                            </div>
+
+
+                            <div class="form-group">
+
+                                <label for="edit-command-service">
+                                    SERVICIO
+                                </label>
+
+                                <input
+                                    id="edit-command-service"
+                                    type="text"
+                                    maxlength="160"
+                                >
+
+                            </div>
+
+
+                            <div class="form-group">
+
+                                <label for="edit-command-level">
+                                    NIVEL
+                                </label>
+
+                                <input
+                                    id="edit-command-level"
+                                    type="text"
+                                    maxlength="50"
+                                >
+
+                            </div>
+
+
+                            <div class="form-group">
+
+                                <label for="edit-command-price">
+                                    PRECIO
+                                </label>
+
+                                <input
+                                    id="edit-command-price"
+                                    type="number"
+                                    min="0"
+                                    max="100000"
+                                >
+
+                            </div>
+
+
+                            <div class="form-group form-group-full">
+
+                                <label class="switch-row">
+
+                                    <span>
+                                        ESTADO GLOBAL
+                                    </span>
+
+                                    <input
+                                        id="edit-command-enabled"
+                                        type="checkbox"
+                                    >
+
+                                    <span class="switch-control"></span>
+
+                                </label>
+
+                            </div>
+
+
+                            <div class="form-group form-group-full">
+
+                                <label class="switch-row">
+
+                                    <span>
+                                        COBRAR SIN RESULTADOS
+                                    </span>
+
+                                    <input
+                                        id="edit-command-charge-no-results"
+                                        type="checkbox"
+                                    >
+
+                                    <span class="switch-control"></span>
+
+                                </label>
+
+                            </div>
+
+                        </div>
+
+
+                        <div class="modal-actions">
+
+                            <button
+                                type="button"
+                                id="cancel-edit-command"
+                                class="btn-secondary"
+                            >
+                                CANCELAR
+                            </button>
+
+                            <button
+                                type="submit"
+                                class="btn-primary"
+                            >
+                                GUARDAR CAMBIOS
+                            </button>
+
+                        </div>
+
+                    </form>
+
+                </div>
+
+            </div>
+
+
+            <!-- ==================================
+                 FOOTER
+            =================================== -->
+
+            <footer class="panel-footer">
+
+                <span>
+                    GUARDIAHEXBOT PLATFORM
+                </span>
+
+                <span>
+                    COMMAND ENGINE • MASTER
+                </span>
+
+            </footer>
+
+        </section>
+
+    </main>
+
+
+    <script src="/static/js/app.js"></script>
+    <script src="/static/js/realtime.js"></script>
+
+</body>
+</html>
