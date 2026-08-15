@@ -1,0 +1,960 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+
+    <meta
+        name="viewport"
+        content="width=device-width, initial-scale=1.0"
+    >
+
+    <title>GUARDIAHEXBOT | Bots</title>
+
+    <link
+        rel="stylesheet"
+        href="/static/css/style.css"
+    >
+</head>
+
+<body class="panel-page">
+
+    <!-- ==========================================
+         SIDEBAR
+    =========================================== -->
+
+    <aside
+        class="sidebar"
+        id="sidebar"
+    >
+
+        <div class="sidebar-brand">
+
+            <div class="sidebar-logo">
+                G
+            </div>
+
+            <div>
+                <h1>
+                    GUARDIA<span>HEX</span>
+                </h1>
+
+                <p>
+                    MASTER CONTROL
+                </p>
+            </div>
+
+        </div>
+
+
+        <div class="sidebar-status">
+
+            <span class="status-dot"></span>
+
+            <div>
+                <strong>
+                    SISTEMA ONLINE
+                </strong>
+
+                <small>
+                    MASTER NODE
+                </small>
+            </div>
+
+        </div>
+
+
+        <nav class="sidebar-nav">
+
+            <a
+                href="/master/dashboard"
+                class="nav-item"
+            >
+                <span>⌂</span>
+                DASHBOARD
+            </a>
+
+            <a
+                href="/master/socios"
+                class="nav-item"
+            >
+                <span>♛</span>
+                SOCIOS
+            </a>
+
+            <a
+                href="/master/bots"
+                class="nav-item active"
+            >
+                <span>◉</span>
+                BOTS
+            </a>
+
+            <a
+                href="/master/versions"
+                class="nav-item"
+            >
+                <span>◆</span>
+                VERSIONES
+            </a>
+
+            <a
+                href="/master/commands"
+                class="nav-item"
+            >
+                <span>⌘</span>
+                COMANDOS
+            </a>
+
+            <a
+                href="/master/api"
+                class="nav-item"
+            >
+                <span>⚡</span>
+                API CENTRAL
+            </a>
+
+        </nav>
+
+
+        <div class="sidebar-footer">
+
+            <div class="master-profile">
+
+                <div class="profile-avatar">
+                    S
+                </div>
+
+                <div>
+                    <strong>
+                        SUPERADMIN
+                    </strong>
+
+                    <small>
+                        CONTROL TOTAL
+                    </small>
+                </div>
+
+            </div>
+
+            <button
+                type="button"
+                id="logout-button"
+                class="btn-logout"
+            >
+                CERRAR SESIÓN
+            </button>
+
+        </div>
+
+    </aside>
+
+
+    <!-- ==========================================
+         CONTENIDO
+    =========================================== -->
+
+    <main class="panel-main">
+
+        <header class="topbar">
+
+            <div class="topbar-left">
+
+                <button
+                    type="button"
+                    class="menu-toggle"
+                    id="menu-toggle"
+                >
+                    ☰
+                </button>
+
+                <div>
+
+                    <span class="page-eyebrow">
+                        MASTER PANEL
+                    </span>
+
+                    <h2>
+                        Administración de Bots
+                    </h2>
+
+                </div>
+
+            </div>
+
+
+            <div class="topbar-right">
+
+                <div class="live-indicator">
+                    <span class="live-dot"></span>
+                    TIEMPO REAL
+                </div>
+
+                <div class="topbar-account">
+
+                    <span>
+                        SUPERADMIN
+                    </span>
+
+                    <strong>
+                        GUARDIAHEXBOT
+                    </strong>
+
+                </div>
+
+            </div>
+
+        </header>
+
+
+        <!-- ======================================
+             CONTENIDO
+        ======================================= -->
+
+        <section class="dashboard-content">
+
+            <div class="dashboard-heading">
+
+                <div>
+
+                    <span class="section-label">
+                        BOT NETWORK
+                    </span>
+
+                    <h3>
+                        Red Multi-Bot
+                    </h3>
+
+                    <p>
+                        Control central de bots MASTER
+                        y bots pertenecientes a socios.
+                    </p>
+
+                </div>
+
+                <button
+                    type="button"
+                    id="open-create-bot"
+                    class="btn-primary"
+                >
+                    ＋ CREAR BOT
+                </button>
+
+            </div>
+
+
+            <!-- ==================================
+                 ESTADÍSTICAS
+            =================================== -->
+
+            <div class="stats-grid">
+
+                <article class="stat-card">
+
+                    <span class="stat-label">
+                        BOTS TOTALES
+                    </span>
+
+                    <strong
+                        id="bots-total"
+                        class="stat-value"
+                    >
+                        —
+                    </strong>
+
+                </article>
+
+
+                <article class="stat-card">
+
+                    <span class="stat-label">
+                        ONLINE
+                    </span>
+
+                    <strong
+                        id="bots-online"
+                        class="stat-value"
+                    >
+                        —
+                    </strong>
+
+                </article>
+
+
+                <article class="stat-card">
+
+                    <span class="stat-label">
+                        OFFLINE
+                    </span>
+
+                    <strong
+                        id="bots-offline"
+                        class="stat-value"
+                    >
+                        —
+                    </strong>
+
+                </article>
+
+
+                <article class="stat-card">
+
+                    <span class="stat-label">
+                        MANTENIMIENTO
+                    </span>
+
+                    <strong
+                        id="bots-maintenance"
+                        class="stat-value"
+                    >
+                        —
+                    </strong>
+
+                </article>
+
+            </div>
+
+
+            <!-- ==================================
+                 FILTROS
+            =================================== -->
+
+            <section class="panel-card">
+
+                <div class="panel-toolbar">
+
+                    <div class="search-box">
+
+                        <span>
+                            ⌕
+                        </span>
+
+                        <input
+                            type="search"
+                            id="bots-search"
+                            placeholder="Buscar por nombre, username, socio o ID..."
+                        >
+
+                    </div>
+
+
+                    <select
+                        id="bots-version-filter"
+                        class="select-control"
+                    >
+                        <option value="">
+                            TODAS LAS VERSIONES
+                        </option>
+
+                        <option value="V1">
+                            V1 INICIAL
+                        </option>
+
+                        <option value="V2">
+                            V2 INICIAL PLUS
+                        </option>
+
+                        <option value="V3">
+                            V3 AVANZADO
+                        </option>
+
+                        <option value="V4">
+                            V4 AVANZADO PLUS
+                        </option>
+
+                        <option value="V5">
+                            V5 BUSINESS
+                        </option>
+                    </select>
+
+
+                    <select
+                        id="bots-status-filter"
+                        class="select-control"
+                    >
+                        <option value="">
+                            TODOS LOS ESTADOS
+                        </option>
+
+                        <option value="ONLINE">
+                            ONLINE
+                        </option>
+
+                        <option value="OFFLINE">
+                            OFFLINE
+                        </option>
+
+                        <option value="MAINTENANCE">
+                            MANTENIMIENTO
+                        </option>
+                    </select>
+
+
+                    <button
+                        type="button"
+                        id="refresh-bots"
+                        class="btn-secondary"
+                    >
+                        ↻ ACTUALIZAR
+                    </button>
+
+                </div>
+
+            </section>
+
+
+            <!-- ==================================
+                 LISTA DE BOTS
+            =================================== -->
+
+            <section class="panel-card">
+
+                <div class="panel-card-header">
+
+                    <div>
+                        <span class="section-label">
+                            BOT DATABASE
+                        </span>
+
+                        <h4>
+                            Bots registrados
+                        </h4>
+                    </div>
+
+                </div>
+
+
+                <div
+                    id="master-bots-container"
+                    class="bot-admin-grid"
+                >
+
+                    <div class="empty-state">
+
+                        <span class="loader"></span>
+
+                        <p>
+                            Cargando bots...
+                        </p>
+
+                    </div>
+
+                </div>
+
+            </section>
+
+
+            <!-- ==================================
+                 MODAL CREAR BOT
+            =================================== -->
+
+            <div
+                id="create-bot-modal"
+                class="modal"
+                hidden
+            >
+
+                <div class="modal-backdrop"></div>
+
+                <div class="modal-card">
+
+                    <div class="modal-header">
+
+                        <div>
+
+                            <span class="section-label">
+                                NEW BOT
+                            </span>
+
+                            <h4>
+                                Crear nuevo bot
+                            </h4>
+
+                        </div>
+
+
+                        <button
+                            type="button"
+                            id="close-create-bot"
+                            class="modal-close"
+                        >
+                            ×
+                        </button>
+
+                    </div>
+
+
+                    <form
+                        id="create-bot-form"
+                        class="panel-form"
+                    >
+
+                        <div class="form-grid">
+
+                            <!-- SOCIO -->
+
+                            <div class="form-group">
+
+                                <label for="bot-socio">
+                                    SOCIO
+                                </label>
+
+                                <select
+                                    id="bot-socio"
+                                    name="socio_id"
+                                    class="select-control"
+                                >
+                                    <option value="">
+                                        Seleccionar socio
+                                    </option>
+                                </select>
+
+                            </div>
+
+
+                            <!-- NOMBRE -->
+
+                            <div class="form-group">
+
+                                <label for="bot-display-name">
+                                    NOMBRE DEL BOT
+                                </label>
+
+                                <input
+                                    id="bot-display-name"
+                                    name="display_name"
+                                    type="text"
+                                    minlength="2"
+                                    maxlength="120"
+                                    placeholder="Ej. OLIMPO DATA"
+                                    required
+                                >
+
+                            </div>
+
+
+                            <!-- USERNAME -->
+
+                            <div class="form-group">
+
+                                <label for="bot-username">
+                                    USERNAME TELEGRAM
+                                </label>
+
+                                <input
+                                    id="bot-username"
+                                    name="username"
+                                    type="text"
+                                    maxlength="100"
+                                    placeholder="@OlimpoDataBot"
+                                >
+
+                            </div>
+
+
+                            <!-- ADMINISTRACIÓN -->
+
+                            <div class="form-group">
+
+                                <label for="bot-administration">
+                                    ADMINISTRACIÓN OFICIAL
+                                </label>
+
+                                <input
+                                    id="bot-administration"
+                                    name="administration_name"
+                                    type="text"
+                                    maxlength="120"
+                                    placeholder="Nombre mostrado en /start"
+                                >
+
+                            </div>
+
+
+                            <!-- VERSIÓN -->
+
+                            <div class="form-group">
+
+                                <label for="bot-version">
+                                    VERSIÓN
+                                </label>
+
+                                <select
+                                    id="bot-version"
+                                    name="version"
+                                    class="select-control"
+                                    required
+                                >
+                                    <option value="V1">
+                                        V1 INICIAL
+                                    </option>
+
+                                    <option value="V2">
+                                        V2 INICIAL PLUS
+                                    </option>
+
+                                    <option value="V3">
+                                        V3 AVANZADO
+                                    </option>
+
+                                    <option value="V4">
+                                        V4 AVANZADO PLUS
+                                    </option>
+
+                                    <option value="V5">
+                                        V5 BUSINESS
+                                    </option>
+                                </select>
+
+                            </div>
+
+
+                            <!-- LÍMITE -->
+
+                            <div class="form-group">
+
+                                <label for="bot-daily-limit">
+                                    LÍMITE DIARIO
+                                </label>
+
+                                <input
+                                    id="bot-daily-limit"
+                                    name="daily_query_limit"
+                                    type="number"
+                                    min="1"
+                                    max="100000"
+                                    value="1000"
+                                    required
+                                >
+
+                            </div>
+
+
+                            <!-- MASTER -->
+
+                            <div class="form-group form-group-full">
+
+                                <label class="switch-row">
+
+                                    <span>
+                                        Crear como bot MASTER
+                                    </span>
+
+                                    <input
+                                        id="bot-is-master"
+                                        name="is_master"
+                                        type="checkbox"
+                                    >
+
+                                    <span class="switch-control"></span>
+
+                                </label>
+
+                                <small class="form-help">
+                                    Solo puede existir un bot MASTER
+                                    dentro de la plataforma.
+                                </small>
+
+                            </div>
+
+                        </div>
+
+
+                        <div
+                            id="bot-form-alert"
+                            class="auth-alert"
+                            hidden
+                        ></div>
+
+
+                        <div class="modal-actions">
+
+                            <button
+                                type="button"
+                                id="cancel-create-bot"
+                                class="btn-secondary"
+                            >
+                                CANCELAR
+                            </button>
+
+
+                            <button
+                                type="submit"
+                                class="btn-primary"
+                            >
+                                CREAR BOT
+                            </button>
+
+                        </div>
+
+                    </form>
+
+                </div>
+
+            </div>
+
+
+            <!-- ==================================
+                 MODAL CONFIGURACIÓN BOT
+            =================================== -->
+
+            <div
+                id="bot-settings-modal"
+                class="modal"
+                hidden
+            >
+
+                <div class="modal-backdrop"></div>
+
+                <div class="modal-card">
+
+                    <div class="modal-header">
+
+                        <div>
+
+                            <span class="section-label">
+                                BOT CONFIGURATION
+                            </span>
+
+                            <h4 id="settings-bot-title">
+                                Configurar bot
+                            </h4>
+
+                        </div>
+
+
+                        <button
+                            type="button"
+                            id="close-bot-settings"
+                            class="modal-close"
+                        >
+                            ×
+                        </button>
+
+                    </div>
+
+
+                    <form
+                        id="bot-settings-form"
+                        class="panel-form"
+                    >
+
+                        <input
+                            type="hidden"
+                            id="settings-bot-id"
+                        >
+
+
+                        <div class="form-grid">
+
+                            <div class="form-group">
+
+                                <label for="settings-display-name">
+                                    NOMBRE
+                                </label>
+
+                                <input
+                                    id="settings-display-name"
+                                    type="text"
+                                    maxlength="120"
+                                >
+
+                            </div>
+
+
+                            <div class="form-group">
+
+                                <label for="settings-username">
+                                    USERNAME
+                                </label>
+
+                                <input
+                                    id="settings-username"
+                                    type="text"
+                                    maxlength="100"
+                                >
+
+                            </div>
+
+
+                            <div class="form-group">
+
+                                <label for="settings-administration">
+                                    ADMINISTRACIÓN
+                                </label>
+
+                                <input
+                                    id="settings-administration"
+                                    type="text"
+                                    maxlength="120"
+                                >
+
+                            </div>
+
+
+                            <div class="form-group">
+
+                                <label for="settings-limit">
+                                    LÍMITE DIARIO
+                                </label>
+
+                                <input
+                                    id="settings-limit"
+                                    type="number"
+                                    min="1"
+                                    max="100000"
+                                >
+
+                            </div>
+
+
+                            <div class="form-group form-group-full">
+
+                                <label for="settings-channel">
+                                    CANAL
+                                </label>
+
+                                <input
+                                    id="settings-channel"
+                                    type="url"
+                                    maxlength="255"
+                                    placeholder="https://t.me/..."
+                                >
+
+                            </div>
+
+
+                            <div class="form-group form-group-full">
+
+                                <label for="settings-group">
+                                    GRUPO
+                                </label>
+
+                                <input
+                                    id="settings-group"
+                                    type="url"
+                                    maxlength="255"
+                                    placeholder="https://t.me/..."
+                                >
+
+                            </div>
+
+
+                            <div class="form-group">
+
+                                <label for="settings-history">
+                                    CHAT HISTORIAL
+                                </label>
+
+                                <input
+                                    id="settings-history"
+                                    type="number"
+                                    placeholder="-100..."
+                                >
+
+                            </div>
+
+
+                            <div class="form-group">
+
+                                <label for="settings-sales">
+                                    CHAT VENTAS
+                                </label>
+
+                                <input
+                                    id="settings-sales"
+                                    type="number"
+                                    placeholder="-100..."
+                                >
+
+                            </div>
+
+
+                            <div class="form-group form-group-full">
+
+                                <label class="switch-row">
+
+                                    <span>
+                                        Modo mantenimiento
+                                    </span>
+
+                                    <input
+                                        id="settings-maintenance"
+                                        type="checkbox"
+                                    >
+
+                                    <span class="switch-control"></span>
+
+                                </label>
+
+                            </div>
+
+
+                            <div class="form-group form-group-full">
+
+                                <label for="settings-maintenance-message">
+                                    MENSAJE DE MANTENIMIENTO
+                                </label>
+
+                                <textarea
+                                    id="settings-maintenance-message"
+                                    maxlength="1000"
+                                    rows="4"
+                                ></textarea>
+
+                            </div>
+
+                        </div>
+
+
+                        <div class="modal-actions">
+
+                            <button
+                                type="button"
+                                id="cancel-bot-settings"
+                                class="btn-secondary"
+                            >
+                                CANCELAR
+                            </button>
+
+                            <button
+                                type="submit"
+                                class="btn-primary"
+                            >
+                                GUARDAR CAMBIOS
+                            </button>
+
+                        </div>
+
+                    </form>
+
+                </div>
+
+            </div>
+
+
+            <!-- ==================================
+                 FOOTER
+            =================================== -->
+
+            <footer class="panel-footer">
+
+                <span>
+                    GUARDIAHEXBOT PLATFORM
+                </span>
+
+                <span>
+                    BOT NETWORK • MASTER CONTROL
+                </span>
+
+            </footer>
+
+        </section>
+
+    </main>
+
+
+    <script src="/static/js/app.js"></script>
+    <script src="/static/js/realtime.js"></script>
+
+</body>
+</html>
