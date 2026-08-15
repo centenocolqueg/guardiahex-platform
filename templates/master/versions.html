@@ -1,0 +1,945 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+
+    <meta
+        name="viewport"
+        content="width=device-width, initial-scale=1.0"
+    >
+
+    <title>GUARDIAHEXBOT | Versiones</title>
+
+    <link
+        rel="stylesheet"
+        href="/static/css/style.css"
+    >
+</head>
+
+<body class="panel-page">
+
+    <!-- ==========================================
+         SIDEBAR
+    =========================================== -->
+
+    <aside
+        class="sidebar"
+        id="sidebar"
+    >
+
+        <div class="sidebar-brand">
+
+            <div class="sidebar-logo">
+                G
+            </div>
+
+            <div>
+                <h1>
+                    GUARDIA<span>HEX</span>
+                </h1>
+
+                <p>
+                    MASTER CONTROL
+                </p>
+            </div>
+
+        </div>
+
+
+        <div class="sidebar-status">
+
+            <span class="status-dot"></span>
+
+            <div>
+                <strong>
+                    SISTEMA ONLINE
+                </strong>
+
+                <small>
+                    MASTER NODE
+                </small>
+            </div>
+
+        </div>
+
+
+        <nav class="sidebar-nav">
+
+            <a
+                href="/master/dashboard"
+                class="nav-item"
+            >
+                <span>⌂</span>
+                DASHBOARD
+            </a>
+
+            <a
+                href="/master/socios"
+                class="nav-item"
+            >
+                <span>♛</span>
+                SOCIOS
+            </a>
+
+            <a
+                href="/master/bots"
+                class="nav-item"
+            >
+                <span>◉</span>
+                BOTS
+            </a>
+
+            <a
+                href="/master/versions"
+                class="nav-item active"
+            >
+                <span>◆</span>
+                VERSIONES
+            </a>
+
+            <a
+                href="/master/commands"
+                class="nav-item"
+            >
+                <span>⌘</span>
+                COMANDOS
+            </a>
+
+            <a
+                href="/master/api"
+                class="nav-item"
+            >
+                <span>⚡</span>
+                API CENTRAL
+            </a>
+
+        </nav>
+
+
+        <div class="sidebar-footer">
+
+            <div class="master-profile">
+
+                <div class="profile-avatar">
+                    S
+                </div>
+
+                <div>
+                    <strong>
+                        SUPERADMIN
+                    </strong>
+
+                    <small>
+                        CONTROL TOTAL
+                    </small>
+                </div>
+
+            </div>
+
+            <button
+                type="button"
+                id="logout-button"
+                class="btn-logout"
+            >
+                CERRAR SESIÓN
+            </button>
+
+        </div>
+
+    </aside>
+
+
+    <!-- ==========================================
+         CONTENIDO
+    =========================================== -->
+
+    <main class="panel-main">
+
+        <header class="topbar">
+
+            <div class="topbar-left">
+
+                <button
+                    type="button"
+                    class="menu-toggle"
+                    id="menu-toggle"
+                >
+                    ☰
+                </button>
+
+                <div>
+
+                    <span class="page-eyebrow">
+                        MASTER PANEL
+                    </span>
+
+                    <h2>
+                        Versiones V1–V5
+                    </h2>
+
+                </div>
+
+            </div>
+
+
+            <div class="topbar-right">
+
+                <div class="live-indicator">
+                    <span class="live-dot"></span>
+                    TIEMPO REAL
+                </div>
+
+                <div class="topbar-account">
+
+                    <span>
+                        SUPERADMIN
+                    </span>
+
+                    <strong>
+                        GUARDIAHEXBOT
+                    </strong>
+
+                </div>
+
+            </div>
+
+        </header>
+
+
+        <!-- ======================================
+             CONTENIDO
+        ======================================= -->
+
+        <section class="dashboard-content">
+
+            <div class="dashboard-heading">
+
+                <div>
+
+                    <span class="section-label">
+                        BOT LICENSING
+                    </span>
+
+                    <h3>
+                        Niveles de Plataforma
+                    </h3>
+
+                    <p>
+                        Controla capacidades, categorías,
+                        comandos y límites de cada versión.
+                    </p>
+
+                </div>
+
+                <button
+                    type="button"
+                    id="refresh-versions"
+                    class="btn-secondary"
+                >
+                    ↻ ACTUALIZAR
+                </button>
+
+            </div>
+
+
+            <!-- ==================================
+                 VERSIONES
+            =================================== -->
+
+            <div
+                id="versions-container"
+                class="version-grid"
+            >
+
+                <!-- V1 -->
+
+                <article
+                    class="version-card"
+                    data-version="V1"
+                >
+
+                    <div class="version-card-header">
+
+                        <span class="version-code">
+                            V1
+                        </span>
+
+                        <span class="version-badge">
+                            INICIAL
+                        </span>
+
+                    </div>
+
+                    <h4>
+                        V1 INICIAL
+                    </h4>
+
+                    <strong class="version-price">
+                        S/ 250
+                    </strong>
+
+                    <div class="version-metrics">
+
+                        <div>
+                            <span>
+                                CATEGORÍAS
+                            </span>
+
+                            <strong>
+                                10 / 19
+                            </strong>
+                        </div>
+
+                        <div>
+                            <span>
+                                CMD
+                            </span>
+
+                            <strong>
+                                25 / 72
+                            </strong>
+                        </div>
+
+                        <div>
+                            <span>
+                                LÍMITE
+                            </span>
+
+                            <strong>
+                                1,000 / día
+                            </strong>
+                        </div>
+
+                    </div>
+
+                    <button
+                        type="button"
+                        class="btn-secondary btn-full version-details"
+                        data-version="V1"
+                    >
+                        VER DETALLES
+                    </button>
+
+                </article>
+
+
+                <!-- V2 -->
+
+                <article
+                    class="version-card"
+                    data-version="V2"
+                >
+
+                    <div class="version-card-header">
+
+                        <span class="version-code">
+                            V2
+                        </span>
+
+                        <span class="version-badge">
+                            PLUS
+                        </span>
+
+                    </div>
+
+                    <h4>
+                        V2 INICIAL PLUS
+                    </h4>
+
+                    <strong class="version-price">
+                        S/ 400
+                    </strong>
+
+                    <div class="version-metrics">
+
+                        <div>
+                            <span>
+                                CATEGORÍAS
+                            </span>
+
+                            <strong>
+                                13 / 19
+                            </strong>
+                        </div>
+
+                        <div>
+                            <span>
+                                CMD
+                            </span>
+
+                            <strong>
+                                40 / 72
+                            </strong>
+                        </div>
+
+                        <div>
+                            <span>
+                                LÍMITE
+                            </span>
+
+                            <strong>
+                                2,000 / día
+                            </strong>
+                        </div>
+
+                    </div>
+
+                    <button
+                        type="button"
+                        class="btn-secondary btn-full version-details"
+                        data-version="V2"
+                    >
+                        VER DETALLES
+                    </button>
+
+                </article>
+
+
+                <!-- V3 -->
+
+                <article
+                    class="version-card"
+                    data-version="V3"
+                >
+
+                    <div class="version-card-header">
+
+                        <span class="version-code">
+                            V3
+                        </span>
+
+                        <span class="version-badge">
+                            AVANZADO
+                        </span>
+
+                    </div>
+
+                    <h4>
+                        V3 AVANZADO
+                    </h4>
+
+                    <strong class="version-price">
+                        S/ 600
+                    </strong>
+
+                    <div class="version-metrics">
+
+                        <div>
+                            <span>
+                                CATEGORÍAS
+                            </span>
+
+                            <strong>
+                                16 / 19
+                            </strong>
+                        </div>
+
+                        <div>
+                            <span>
+                                CMD
+                            </span>
+
+                            <strong>
+                                55 / 72
+                            </strong>
+                        </div>
+
+                        <div>
+                            <span>
+                                LÍMITE
+                            </span>
+
+                            <strong>
+                                5,000 / día
+                            </strong>
+                        </div>
+
+                    </div>
+
+                    <button
+                        type="button"
+                        class="btn-secondary btn-full version-details"
+                        data-version="V3"
+                    >
+                        VER DETALLES
+                    </button>
+
+                </article>
+
+
+                <!-- V4 -->
+
+                <article
+                    class="version-card"
+                    data-version="V4"
+                >
+
+                    <div class="version-card-header">
+
+                        <span class="version-code">
+                            V4
+                        </span>
+
+                        <span class="version-badge">
+                            PRO
+                        </span>
+
+                    </div>
+
+                    <h4>
+                        V4 AVANZADO PLUS
+                    </h4>
+
+                    <strong class="version-price">
+                        S/ 1,000
+                    </strong>
+
+                    <div class="version-metrics">
+
+                        <div>
+                            <span>
+                                CATEGORÍAS
+                            </span>
+
+                            <strong>
+                                18 / 19
+                            </strong>
+                        </div>
+
+                        <div>
+                            <span>
+                                CMD
+                            </span>
+
+                            <strong>
+                                65 / 72
+                            </strong>
+                        </div>
+
+                        <div>
+                            <span>
+                                LÍMITE
+                            </span>
+
+                            <strong>
+                                9,000 / día
+                            </strong>
+                        </div>
+
+                    </div>
+
+                    <button
+                        type="button"
+                        class="btn-secondary btn-full version-details"
+                        data-version="V4"
+                    >
+                        VER DETALLES
+                    </button>
+
+                </article>
+
+
+                <!-- V5 -->
+
+                <article
+                    class="version-card version-card-premium"
+                    data-version="V5"
+                >
+
+                    <div class="version-card-header">
+
+                        <span class="version-code">
+                            V5
+                        </span>
+
+                        <span class="version-badge">
+                            BUSINESS
+                        </span>
+
+                    </div>
+
+                    <h4>
+                        V5 BUSINESS
+                    </h4>
+
+                    <strong class="version-price">
+                        S/ 1,200
+                    </strong>
+
+                    <div class="version-metrics">
+
+                        <div>
+                            <span>
+                                CATEGORÍAS
+                            </span>
+
+                            <strong>
+                                19 / 19
+                            </strong>
+                        </div>
+
+                        <div>
+                            <span>
+                                CMD
+                            </span>
+
+                            <strong>
+                                72 / 72
+                            </strong>
+                        </div>
+
+                        <div>
+                            <span>
+                                LÍMITE
+                            </span>
+
+                            <strong>
+                                10,000 / día
+                            </strong>
+                        </div>
+
+                    </div>
+
+                    <button
+                        type="button"
+                        class="btn-primary btn-full version-details"
+                        data-version="V5"
+                    >
+                        VER DETALLES
+                    </button>
+
+                </article>
+
+            </div>
+
+
+            <!-- ==================================
+                 ASIGNAR VERSIONES
+            =================================== -->
+
+            <section class="panel-card">
+
+                <div class="panel-card-header">
+
+                    <div>
+
+                        <span class="section-label">
+                            VERSION ASSIGNMENT
+                        </span>
+
+                        <h4>
+                            Bots y versiones activas
+                        </h4>
+
+                    </div>
+
+                </div>
+
+
+                <div class="panel-toolbar">
+
+                    <div class="search-box">
+
+                        <span>
+                            ⌕
+                        </span>
+
+                        <input
+                            type="search"
+                            id="versions-bot-search"
+                            placeholder="Buscar bot..."
+                        >
+
+                    </div>
+
+                </div>
+
+
+                <div class="table-responsive">
+
+                    <table class="data-table">
+
+                        <thead>
+
+                            <tr>
+
+                                <th>
+                                    BOT
+                                </th>
+
+                                <th>
+                                    SOCIO
+                                </th>
+
+                                <th>
+                                    VERSIÓN
+                                </th>
+
+                                <th>
+                                    CATEGORÍAS
+                                </th>
+
+                                <th>
+                                    CMD
+                                </th>
+
+                                <th>
+                                    LÍMITE
+                                </th>
+
+                                <th>
+                                    ACCIÓN
+                                </th>
+
+                            </tr>
+
+                        </thead>
+
+
+                        <tbody id="versions-bots-table">
+
+                            <tr>
+
+                                <td
+                                    colspan="7"
+                                    class="table-loading"
+                                >
+                                    <span class="loader"></span>
+
+                                    Cargando bots...
+                                </td>
+
+                            </tr>
+
+                        </tbody>
+
+                    </table>
+
+                </div>
+
+            </section>
+
+
+            <!-- ==================================
+                 MODAL CAMBIAR VERSIÓN
+            =================================== -->
+
+            <div
+                id="change-version-modal"
+                class="modal"
+                hidden
+            >
+
+                <div class="modal-backdrop"></div>
+
+                <div class="modal-card modal-card-small">
+
+                    <div class="modal-header">
+
+                        <div>
+
+                            <span class="section-label">
+                                VERSION CONTROL
+                            </span>
+
+                            <h4>
+                                Cambiar versión
+                            </h4>
+
+                        </div>
+
+
+                        <button
+                            type="button"
+                            id="close-change-version"
+                            class="modal-close"
+                        >
+                            ×
+                        </button>
+
+                    </div>
+
+
+                    <form id="change-version-form">
+
+                        <input
+                            type="hidden"
+                            id="change-version-bot-id"
+                        >
+
+
+                        <div class="form-group">
+
+                            <label>
+                                BOT
+                            </label>
+
+                            <strong
+                                id="change-version-bot-name"
+                                class="form-static-value"
+                            >
+                                —
+                            </strong>
+
+                        </div>
+
+
+                        <div class="form-group">
+
+                            <label for="change-version-select">
+                                NUEVA VERSIÓN
+                            </label>
+
+                            <select
+                                id="change-version-select"
+                                class="select-control"
+                                required
+                            >
+
+                                <option value="V1">
+                                    V1 INICIAL
+                                </option>
+
+                                <option value="V2">
+                                    V2 INICIAL PLUS
+                                </option>
+
+                                <option value="V3">
+                                    V3 AVANZADO
+                                </option>
+
+                                <option value="V4">
+                                    V4 AVANZADO PLUS
+                                </option>
+
+                                <option value="V5">
+                                    V5 BUSINESS
+                                </option>
+
+                            </select>
+
+                        </div>
+
+
+                        <div
+                            id="version-change-preview"
+                            class="version-preview"
+                        >
+                            Selecciona una versión.
+                        </div>
+
+
+                        <div class="modal-actions">
+
+                            <button
+                                type="button"
+                                id="cancel-change-version"
+                                class="btn-secondary"
+                            >
+                                CANCELAR
+                            </button>
+
+                            <button
+                                type="submit"
+                                class="btn-primary"
+                            >
+                                APLICAR VERSIÓN
+                            </button>
+
+                        </div>
+
+                    </form>
+
+                </div>
+
+            </div>
+
+
+            <!-- ==================================
+                 MODAL DETALLES
+            =================================== -->
+
+            <div
+                id="version-details-modal"
+                class="modal"
+                hidden
+            >
+
+                <div class="modal-backdrop"></div>
+
+                <div class="modal-card">
+
+                    <div class="modal-header">
+
+                        <div>
+
+                            <span class="section-label">
+                                VERSION DETAILS
+                            </span>
+
+                            <h4 id="version-details-title">
+                                Detalles
+                            </h4>
+
+                        </div>
+
+
+                        <button
+                            type="button"
+                            id="close-version-details"
+                            class="modal-close"
+                        >
+                            ×
+                        </button>
+
+                    </div>
+
+
+                    <div
+                        id="version-details-content"
+                        class="version-detail-content"
+                    >
+
+                        <div class="empty-state">
+
+                            <span class="loader"></span>
+
+                            <p>
+                                Cargando versión...
+                            </p>
+
+                        </div>
+
+                    </div>
+
+                </div>
+
+            </div>
+
+
+            <!-- ==================================
+                 FOOTER
+            =================================== -->
+
+            <footer class="panel-footer">
+
+                <span>
+                    GUARDIAHEXBOT PLATFORM
+                </span>
+
+                <span>
+                    VERSION CONTROL • MASTER
+                </span>
+
+            </footer>
+
+        </section>
+
+    </main>
+
+
+    <script src="/static/js/app.js"></script>
+    <script src="/static/js/realtime.js"></script>
+
+</body>
+</html>
