@@ -1,0 +1,782 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+
+    <meta
+        name="viewport"
+        content="width=device-width, initial-scale=1.0"
+    >
+
+    <meta
+        name="description"
+        content="Panel Maestro GUARDIAHEXBOT PLATFORM"
+    >
+
+    <title>GUARDIAHEXBOT | Master Panel</title>
+
+    <link
+        rel="stylesheet"
+        href="/static/css/style.css"
+    >
+</head>
+
+<body class="panel-page">
+
+    <!-- ==========================================
+         SIDEBAR
+    =========================================== -->
+
+    <aside
+        class="sidebar"
+        id="sidebar"
+    >
+
+        <div class="sidebar-brand">
+
+            <div class="sidebar-logo">
+                G
+            </div>
+
+            <div>
+                <h1>
+                    GUARDIA<span>HEX</span>
+                </h1>
+
+                <p>
+                    MASTER CONTROL
+                </p>
+            </div>
+
+        </div>
+
+
+        <div class="sidebar-status">
+
+            <span class="status-dot"></span>
+
+            <div>
+                <strong>
+                    SISTEMA ONLINE
+                </strong>
+
+                <small>
+                    MASTER NODE
+                </small>
+            </div>
+
+        </div>
+
+
+        <nav class="sidebar-nav">
+
+            <a
+                href="/master/dashboard"
+                class="nav-item active"
+            >
+                <span>⌂</span>
+                DASHBOARD
+            </a>
+
+            <a
+                href="/master/socios"
+                class="nav-item"
+            >
+                <span>♛</span>
+                SOCIOS
+            </a>
+
+            <a
+                href="/master/bots"
+                class="nav-item"
+            >
+                <span>◉</span>
+                BOTS
+            </a>
+
+            <a
+                href="/master/versions"
+                class="nav-item"
+            >
+                <span>◆</span>
+                VERSIONES
+            </a>
+
+            <a
+                href="/master/commands"
+                class="nav-item"
+            >
+                <span>⌘</span>
+                COMANDOS
+            </a>
+
+            <a
+                href="/master/api"
+                class="nav-item"
+            >
+                <span>⚡</span>
+                API CENTRAL
+            </a>
+
+        </nav>
+
+
+        <div class="sidebar-footer">
+
+            <div class="master-profile">
+
+                <div class="profile-avatar">
+                    S
+                </div>
+
+                <div>
+                    <strong>
+                        SUPERADMIN
+                    </strong>
+
+                    <small>
+                        CONTROL TOTAL
+                    </small>
+                </div>
+
+            </div>
+
+            <button
+                type="button"
+                id="logout-button"
+                class="btn-logout"
+            >
+                CERRAR SESIÓN
+            </button>
+
+        </div>
+
+    </aside>
+
+
+    <!-- ==========================================
+         CONTENIDO
+    =========================================== -->
+
+    <main class="panel-main">
+
+        <!-- TOPBAR -->
+
+        <header class="topbar">
+
+            <div class="topbar-left">
+
+                <button
+                    type="button"
+                    class="menu-toggle"
+                    id="menu-toggle"
+                    aria-label="Abrir menú"
+                >
+                    ☰
+                </button>
+
+                <div>
+
+                    <span class="page-eyebrow">
+                        MASTER PANEL
+                    </span>
+
+                    <h2>
+                        Centro de Control
+                    </h2>
+
+                </div>
+
+            </div>
+
+
+            <div class="topbar-right">
+
+                <div class="live-indicator">
+
+                    <span class="live-dot"></span>
+
+                    TIEMPO REAL
+
+                </div>
+
+                <div class="topbar-account">
+
+                    <span>
+                        SUPERADMIN
+                    </span>
+
+                    <strong>
+                        GUARDIAHEXBOT
+                    </strong>
+
+                </div>
+
+            </div>
+
+        </header>
+
+
+        <!-- ======================================
+             CONTENIDO DASHBOARD
+        ======================================= -->
+
+        <section class="dashboard-content">
+
+            <!-- CABECERA -->
+
+            <div class="dashboard-heading">
+
+                <div>
+
+                    <span class="section-label">
+                        GLOBAL OVERVIEW
+                    </span>
+
+                    <h3>
+                        Estado de la Plataforma
+                    </h3>
+
+                    <p>
+                        Control global de bots, usuarios,
+                        créditos y servicios.
+                    </p>
+
+                </div>
+
+                <button
+                    type="button"
+                    id="refresh-dashboard"
+                    class="btn-secondary"
+                >
+                    ↻ ACTUALIZAR
+                </button>
+
+            </div>
+
+
+            <!-- ==================================
+                 TARJETAS PRINCIPALES
+            =================================== -->
+
+            <div class="stats-grid">
+
+                <article class="stat-card">
+
+                    <div class="stat-card-top">
+                        <span class="stat-icon">
+                            ◉
+                        </span>
+
+                        <span class="stat-state">
+                            GLOBAL
+                        </span>
+                    </div>
+
+                    <span class="stat-label">
+                        BOTS TOTALES
+                    </span>
+
+                    <strong
+                        id="stat-bots-total"
+                        class="stat-value"
+                    >
+                        —
+                    </strong>
+
+                    <small>
+                        Activos:
+                        <b id="stat-bots-active">
+                            —
+                        </b>
+                    </small>
+
+                </article>
+
+
+                <article class="stat-card">
+
+                    <div class="stat-card-top">
+                        <span class="stat-icon">
+                            ♙
+                        </span>
+
+                        <span class="stat-state">
+                            USUARIOS
+                        </span>
+                    </div>
+
+                    <span class="stat-label">
+                        USUARIOS REGISTRADOS
+                    </span>
+
+                    <strong
+                        id="stat-users-total"
+                        class="stat-value"
+                    >
+                        —
+                    </strong>
+
+                    <small>
+                        Sellers:
+                        <b id="stat-sellers-total">
+                            —
+                        </b>
+                    </small>
+
+                </article>
+
+
+                <article class="stat-card">
+
+                    <div class="stat-card-top">
+                        <span class="stat-icon">
+                            ◈
+                        </span>
+
+                        <span class="stat-state">
+                            CRÉDITOS
+                        </span>
+                    </div>
+
+                    <span class="stat-label">
+                        CRÉDITOS EN CIRCULACIÓN
+                    </span>
+
+                    <strong
+                        id="stat-credits"
+                        class="stat-value"
+                    >
+                        —
+                    </strong>
+
+                    <small>
+                        Balance global
+                    </small>
+
+                </article>
+
+
+                <article class="stat-card">
+
+                    <div class="stat-card-top">
+                        <span class="stat-icon">
+                            ♦
+                        </span>
+
+                        <span class="stat-state">
+                            PLANES
+                        </span>
+                    </div>
+
+                    <span class="stat-label">
+                        SUSCRIPCIONES ACTIVAS
+                    </span>
+
+                    <strong
+                        id="stat-subscriptions"
+                        class="stat-value"
+                    >
+                        —
+                    </strong>
+
+                    <small>
+                        Todos los bots
+                    </small>
+
+                </article>
+
+
+                <article class="stat-card">
+
+                    <div class="stat-card-top">
+                        <span class="stat-icon">
+                            ⚠
+                        </span>
+
+                        <span class="stat-state warning">
+                            MONITOR
+                        </span>
+                    </div>
+
+                    <span class="stat-label">
+                        ERRORES HOY
+                    </span>
+
+                    <strong
+                        id="stat-errors"
+                        class="stat-value"
+                    >
+                        —
+                    </strong>
+
+                    <small>
+                        Auditoría del sistema
+                    </small>
+
+                </article>
+
+            </div>
+
+
+            <!-- ==================================
+                 ZONA PRINCIPAL
+            =================================== -->
+
+            <div class="dashboard-grid">
+
+                <!-- BOTS -->
+
+                <section class="panel-card panel-card-large">
+
+                    <div class="panel-card-header">
+
+                        <div>
+                            <span class="section-label">
+                                BOT NETWORK
+                            </span>
+
+                            <h4>
+                                Bots conectados
+                            </h4>
+                        </div>
+
+                        <a
+                            href="/master/bots"
+                            class="panel-link"
+                        >
+                            VER TODOS →
+                        </a>
+
+                    </div>
+
+
+                    <div
+                        id="bots-container"
+                        class="bots-list"
+                    >
+
+                        <div class="empty-state">
+                            <span class="loader"></span>
+
+                            <p>
+                                Cargando bots...
+                            </p>
+                        </div>
+
+                    </div>
+
+                </section>
+
+
+                <!-- API -->
+
+                <section class="panel-card">
+
+                    <div class="panel-card-header">
+
+                        <div>
+                            <span class="section-label">
+                                CORE SERVICE
+                            </span>
+
+                            <h4>
+                                API Central
+                            </h4>
+                        </div>
+
+                    </div>
+
+
+                    <div class="api-status-card">
+
+                        <div class="api-status-icon">
+                            ⚡
+                        </div>
+
+                        <div>
+
+                            <span>
+                                FUENTESDATA
+                            </span>
+
+                            <strong
+                                id="provider-status"
+                            >
+                                COMPROBANDO...
+                            </strong>
+
+                        </div>
+
+                    </div>
+
+
+                    <div class="status-row">
+
+                        <span>
+                            TOKEN
+                        </span>
+
+                        <strong
+                            id="provider-token"
+                        >
+                            —
+                        </strong>
+
+                    </div>
+
+
+                    <div class="status-row">
+
+                        <span>
+                            URL BASE
+                        </span>
+
+                        <strong
+                            id="provider-url"
+                        >
+                            —
+                        </strong>
+
+                    </div>
+
+
+                    <div class="status-row">
+
+                        <span>
+                            CONEXIÓN
+                        </span>
+
+                        <strong
+                            id="provider-ready"
+                        >
+                            —
+                        </strong>
+
+                    </div>
+
+
+                    <a
+                        href="/master/api"
+                        class="btn-secondary btn-full"
+                    >
+                        CONFIGURAR API
+                    </a>
+
+                </section>
+
+
+                <!-- ACTIVIDAD -->
+
+                <section class="panel-card">
+
+                    <div class="panel-card-header">
+
+                        <div>
+                            <span class="section-label">
+                                LIVE SYSTEM
+                            </span>
+
+                            <h4>
+                                Estado del sistema
+                            </h4>
+                        </div>
+
+                    </div>
+
+
+                    <div class="system-monitor">
+
+                        <div class="monitor-row">
+
+                            <span>
+                                Backend
+                            </span>
+
+                            <strong class="status-online">
+                                ONLINE
+                            </strong>
+
+                        </div>
+
+
+                        <div class="monitor-row">
+
+                            <span>
+                                PostgreSQL
+                            </span>
+
+                            <strong
+                                id="database-status"
+                                class="status-online"
+                            >
+                                ONLINE
+                            </strong>
+
+                        </div>
+
+
+                        <div class="monitor-row">
+
+                            <span>
+                                WebSockets
+                            </span>
+
+                            <strong
+                                id="websocket-status"
+                                class="status-pending"
+                            >
+                                CONNECTING
+                            </strong>
+
+                        </div>
+
+
+                        <div class="monitor-row">
+
+                            <span>
+                                Panel Master
+                            </span>
+
+                            <strong class="status-online">
+                                ACTIVE
+                            </strong>
+
+                        </div>
+
+                    </div>
+
+                </section>
+
+            </div>
+
+
+            <!-- ==================================
+                 ACCIONES RÁPIDAS
+            =================================== -->
+
+            <section class="quick-actions">
+
+                <div class="panel-card-header">
+
+                    <div>
+                        <span class="section-label">
+                            MASTER ACTIONS
+                        </span>
+
+                        <h4>
+                            Acciones rápidas
+                        </h4>
+                    </div>
+
+                </div>
+
+
+                <div class="quick-actions-grid">
+
+                    <a
+                        href="/master/socios"
+                        class="quick-action"
+                    >
+                        <span>＋</span>
+
+                        <div>
+                            <strong>
+                                CREAR SOCIO
+                            </strong>
+
+                            <small>
+                                Nueva cuenta
+                            </small>
+                        </div>
+                    </a>
+
+
+                    <a
+                        href="/master/bots"
+                        class="quick-action"
+                    >
+                        <span>◉</span>
+
+                        <div>
+                            <strong>
+                                ADMINISTRAR BOTS
+                            </strong>
+
+                            <small>
+                                ON / OFF / configuración
+                            </small>
+                        </div>
+                    </a>
+
+
+                    <a
+                        href="/master/versions"
+                        class="quick-action"
+                    >
+                        <span>◆</span>
+
+                        <div>
+                            <strong>
+                                VERSIONES V1–V5
+                            </strong>
+
+                            <small>
+                                Planes de bots
+                            </small>
+                        </div>
+                    </a>
+
+
+                    <a
+                        href="/master/commands"
+                        class="quick-action"
+                    >
+                        <span>⌘</span>
+
+                        <div>
+                            <strong>
+                                CONFIGURAR CMD
+                            </strong>
+
+                            <small>
+                                Control maestro
+                            </small>
+                        </div>
+                    </a>
+
+                </div>
+
+            </section>
+
+
+            <!-- ==================================
+                 FOOTER
+            =================================== -->
+
+            <footer class="panel-footer">
+
+                <span>
+                    GUARDIAHEXBOT PLATFORM
+                </span>
+
+                <span>
+                    MASTER CONTROL • v1.0
+                </span>
+
+            </footer>
+
+        </section>
+
+    </main>
+
+
+    <!-- ==========================================
+         JAVASCRIPT
+    =========================================== -->
+
+    <script src="/static/js/app.js"></script>
+    <script src="/static/js/realtime.js"></script>
+
+</body>
+</html>
