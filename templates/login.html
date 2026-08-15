@@ -1,0 +1,244 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+
+    <meta
+        name="viewport"
+        content="width=device-width, initial-scale=1.0"
+    >
+
+    <meta
+        name="description"
+        content="Panel de acceso GUARDIAHEXBOT PLATFORM"
+    >
+
+    <title>GUARDIAHEXBOT | Acceso</title>
+
+    <link
+        rel="stylesheet"
+        href="/static/css/style.css"
+    >
+</head>
+
+<body class="auth-page">
+
+    <!-- FONDO -->
+    <div class="cyber-background">
+        <div class="cyber-grid"></div>
+        <div class="cyber-glow cyber-glow-one"></div>
+        <div class="cyber-glow cyber-glow-two"></div>
+    </div>
+
+
+    <!-- CONTENEDOR PRINCIPAL -->
+    <main class="auth-wrapper">
+
+        <section class="auth-card">
+
+            <!-- MARCA -->
+            <div class="auth-brand">
+
+                <div class="auth-logo">
+                    <span>G</span>
+                </div>
+
+                <div class="auth-brand-text">
+                    <h1>
+                        GUARDIA<span>HEX</span>
+                    </h1>
+
+                    <p>
+                        MULTI-BOT CONTROL PLATFORM
+                    </p>
+                </div>
+
+            </div>
+
+
+            <!-- ESTADO -->
+            <div class="system-status">
+
+                <span class="status-dot"></span>
+
+                <span>
+                    SISTEMA OPERATIVO
+                </span>
+
+            </div>
+
+
+            <!-- CABECERA -->
+            <div class="auth-heading">
+
+                <span class="auth-eyebrow">
+                    SECURE ACCESS
+                </span>
+
+                <h2>
+                    Panel de Administración
+                </h2>
+
+                <p>
+                    Ingresa tus credenciales para acceder
+                    al sistema.
+                </p>
+
+            </div>
+
+
+            <!-- ALERTAS -->
+            <div
+                id="login-alert"
+                class="auth-alert"
+                role="alert"
+                aria-live="polite"
+                hidden
+            ></div>
+
+
+            <!-- FORMULARIO -->
+            <form
+                id="login-form"
+                class="auth-form"
+                autocomplete="on"
+            >
+
+                <!-- USUARIO -->
+                <div class="form-group">
+
+                    <label for="username">
+                        USUARIO
+                    </label>
+
+                    <div class="input-shell">
+
+                        <span class="input-icon">
+                            ◉
+                        </span>
+
+                        <input
+                            id="username"
+                            name="username"
+                            type="text"
+                            minlength="3"
+                            maxlength="80"
+                            autocomplete="username"
+                            placeholder="Ingresa tu usuario"
+                            required
+                        >
+
+                    </div>
+
+                </div>
+
+
+                <!-- CONTRASEÑA -->
+                <div class="form-group">
+
+                    <div class="form-label-row">
+
+                        <label for="password">
+                            CONTRASEÑA
+                        </label>
+
+                        <span class="secure-label">
+                            CIFRADO
+                        </span>
+
+                    </div>
+
+                    <div class="input-shell">
+
+                        <span class="input-icon">
+                            ◆
+                        </span>
+
+                        <input
+                            id="password"
+                            name="password"
+                            type="password"
+                            maxlength="200"
+                            autocomplete="current-password"
+                            placeholder="Ingresa tu contraseña"
+                            required
+                        >
+
+                        <button
+                            type="button"
+                            id="toggle-password"
+                            class="password-toggle"
+                            aria-label="Mostrar contraseña"
+                        >
+                            VER
+                        </button>
+
+                    </div>
+
+                </div>
+
+
+                <!-- BOTÓN LOGIN -->
+                <button
+                    id="login-button"
+                    class="btn-primary btn-login"
+                    type="submit"
+                >
+
+                    <span id="login-button-text">
+                        ACCEDER AL SISTEMA
+                    </span>
+
+                    <span class="button-arrow">
+                        →
+                    </span>
+
+                </button>
+
+            </form>
+
+
+            <!-- SEGURIDAD -->
+            <div class="auth-security">
+
+                <div class="security-line"></div>
+
+                <p>
+                    🛡 ACCESO PROTEGIDO
+                </p>
+
+                <span>
+                    Las sesiones y permisos son
+                    administrados individualmente.
+                </span>
+
+            </div>
+
+
+            <!-- FOOTER -->
+            <footer class="auth-footer">
+
+                <span>
+                    GUARDIAHEXBOT PLATFORM
+                </span>
+
+                <span class="footer-separator">
+                    •
+                </span>
+
+                <span>
+                    v1.0
+                </span>
+
+            </footer>
+
+        </section>
+
+    </main>
+
+
+    <!-- JAVASCRIPT -->
+    <script src="/static/js/app.js"></script>
+
+</body>
+</html>
