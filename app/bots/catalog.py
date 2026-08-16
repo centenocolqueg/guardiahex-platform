@@ -1,941 +1,468 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from functools import lru_cache
-from math import ceil
+
+from sqlalchemy import select
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from app.bots.catalog import (
+    COMMAND_CATALOG,
+    VERSION_COMMAND_LIMITS,
+    get_commands_for_version,
+)
+from app.models.command import CommandModel
 
 
 # =========================================================
-# CONSTANTES
+# RESULTADO DE SINCRONIZACIÓN
 # =========================================================
 
-EXPECTED_TOTAL_CATEGORIES = 19
-EXPECTED_TOTAL_COMMANDS = 72
-
-COMMANDS_PER_PAGE = 3
-
-
-# =========================================================
-# MODELO CMD
-# =========================================================
-
-@dataclass(frozen=True, slots=True)
-class CommandItem:
-    category: str
-    code: str
-    command: str
-    title: str
-    level: str
-    price: int
-    result: str
-    enabled: bool = True
+@dataclass(slots=True)
+class CatalogSyncResult:
+    total: int
+    created: int
+    updated: int
+    unchanged: int
 
 
 # =========================================================
-# CATEGORÍAS
+# SERVICIO
 # =========================================================
 
-CATEGORY_ORDER: list[str] = [
-    "RENIEC",
-    "TELEFONIA",
-    "JUSTICIA",
-    "SUNAT",
-    "SUNARP",
-    "VEHICULOS",
-    "CERTIFICADOS",
-    "ESTUDIOS",
-    "FAMILIA",
-    "FINANCIERO",
-    "SEEKER",
-    "MTC",
-    "ACTAS",
-    "VOUCHER",
-    "INTEL_X",
-    "VIP",
-    "INTERNACIONAL",
-    "SELLER",
-    "CONSULTAS_MASIVAS",
-]
+class CatalogSyncService:
+    """
+    Sincroniza catalog.py con la tabla commands.
 
+    Características:
 
-CATEGORY_META: dict[str, dict[str, str | int]] = {
-    "RENIEC": {
-        "title": "RENIEC",
-        "icon": "🪪",
-        "count": 9,
-    },
-    "TELEFONIA": {
-        "title": "TELEFONÍA",
-        "icon": "📞",
-        "count": 5,
-    },
-    "JUSTICIA": {
-        "title": "JUSTICIA",
-        "icon": "⚖️",
-        "count": 10,
-    },
-    "SUNAT": {
-        "title": "SUNAT",
-        "icon": "🏛",
-        "count": 4,
-    },
-    "SUNARP": {
-        "title": "SUNARP",
-        "icon": "🏠",
-        "count": 5,
-    },
-    "VEHICULOS": {
-        "title": "VEHÍCULOS",
-        "icon": "🚗",
-        "count": 6,
-    },
-    "CERTIFICADOS": {
-        "title": "CERTIFICADOS",
-        "icon": "📜",
-        "count": 3,
-    },
-    "ESTUDIOS": {
-        "title": "ESTUDIOS",
-        "icon": "🎓",
-        "count": 2,
-    },
-    "FAMILIA": {
-        "title": "FAMILIA",
-        "icon": "👥",
-        "count": 2,
-    },
-    "FINANCIERO": {
-        "title": "FINANCIERO",
-        "icon": "💰",
-        "count": 4,
-    },
-    "SEEKER": {
-        "title": "SEEKER",
-        "icon": "🔎",
-        "count": 2,
-    },
-    "MTC": {
-        "title": "MTC",
-        "icon": "🚦",
-        "count": 5,
-    },
-    "ACTAS": {
-        "title": "ACTAS",
-        "icon": "📑",
-        "count": 1,
-    },
-    "VOUCHER": {
-        "title": "VOUCHER",
-        "icon": "💳",
-        "count": 2,
-    },
-    "INTEL_X": {
-        "title": "INTEL X",
-        "icon": "🛰",
-        "count": 1,
-    },
-    "VIP": {
-        "title": "VIP",
-        "icon": "💎",
-        "count": 2,
-    },
-    "INTERNACIONAL": {
-        "title": "INTERNACIONAL",
-        "icon": "🌎",
-        "count": 1,
-    },
-    "SELLER": {
-        "title": "SELLER",
-        "icon": "👑",
-        "count": 3,
-    },
-    "CONSULTAS_MASIVAS": {
-        "title": "CONSULTAS MASIVAS",
-        "icon": "📊",
-        "count": 5,
-    },
-}
+    - idempotente;
+    - no duplica CMD;
+    - mantiene exactamente 72 comandos;
+    - calcula V1-V5 automáticamente;
+    - no inventa provider_key;
+    - no borra configuraciones privadas;
+    - preserva ajustes comerciales existentes
+      como precio, nivel y enabled_global.
+    """
 
-
-# =========================================================
-# VERSIONES
-# =========================================================
-
-VERSION_CATEGORY_COUNTS: dict[str, int] = {
-    "V1": 10,
-    "V2": 13,
-    "V3": 16,
-    "V4": 18,
-    "V5": 19,
-}
-
-
-VERSION_COMMAND_LIMITS: dict[str, int] = {
-    "V1": 25,
-    "V2": 40,
-    "V3": 55,
-    "V4": 65,
-    "V5": 72,
-}
-
-
-# =========================================================
-# NORMALIZACIÓN
-# =========================================================
-
-def normalize_category(
-    category: str,
-) -> str:
-    return (
-        category
-        .strip()
-        .upper()
-        .replace(" ", "_")
+    VERSIONS = (
+        "V1",
+        "V2",
+        "V3",
+        "V4",
+        "V5",
     )
 
+    # =====================================================
+    # VERSIONES DE CADA CMD
+    # =====================================================
 
-def normalize_version(
-    version: str,
-) -> str:
-    """
-    Una versión inválida no debe convertirse
-    silenciosamente en V1.
-    """
+    @classmethod
+    def _build_versions_map(
+        cls,
+    ) -> dict[str, list[str]]:
 
-    value = (
-        version
-        .strip()
-        .upper()
-    )
+        versions_by_code: dict[
+            str,
+            list[str],
+        ] = {
+            item.code: []
+            for item in COMMAND_CATALOG
+        }
 
-    if value not in VERSION_CATEGORY_COUNTS:
-        raise ValueError(
-            f"Versión inválida: {value!r}"
-        )
+        for version in cls.VERSIONS:
 
-    return value
-
-
-# =========================================================
-# CONSTRUIR CATÁLOGO
-# =========================================================
-
-def _build_catalog() -> list[CommandItem]:
-    """
-    Crea los 72 espacios lógicos del catálogo.
-
-    Continúan siendo servicios genéricos.
-    Los endpoints reales solo deberán configurarse
-    cuando exista documentación autorizada.
-    """
-
-    catalog: list[CommandItem] = []
-
-    for category in CATEGORY_ORDER:
-
-        meta = CATEGORY_META[
-            category
-        ]
-
-        count = int(
-            meta["count"]
-        )
-
-        title = str(
-            meta["title"]
-        )
-
-        prefix = (
-            category
-            .lower()
-            .replace("_", "")
-        )
-
-        for number in range(
-            1,
-            count + 1,
-        ):
-
-            catalog.append(
-                CommandItem(
-                    category=category,
-
-                    code=(
-                        f"{category}_"
-                        f"{number:02d}"
-                    ),
-
-                    command=(
-                        f"/{prefix}"
-                        f"{number}"
-                    ),
-
-                    title=(
-                        f"{title} - "
-                        f"SERVICIO {number:02d}"
-                    ),
-
-                    level="CONFIGURABLE",
-
-                    price=1,
-
-                    result=(
-                        "RESULTADO AUTORIZADO "
-                        "SEGÚN CONFIGURACIÓN "
-                        "DEL SERVICIO"
-                    ),
-
-                    enabled=True,
+            commands = (
+                get_commands_for_version(
+                    version
                 )
             )
 
-    return catalog
+            for item in commands:
+                versions_by_code[
+                    item.code
+                ].append(
+                    version
+                )
 
+        return versions_by_code
 
-COMMAND_CATALOG: list[
-    CommandItem
-] = _build_catalog()
+    # =====================================================
+    # VALIDAR MAPA
+    # =====================================================
 
+    @classmethod
+    def _validate_versions_map(
+        cls,
+        versions_by_code: dict[
+            str,
+            list[str],
+        ],
+    ) -> None:
 
-# =========================================================
-# VALIDACIÓN INTERNA
-# =========================================================
-
-def _validate_catalog() -> None:
-    """
-    Evita arrancar con un catálogo inconsistente.
-    """
-
-    if (
-        len(CATEGORY_ORDER)
-        != EXPECTED_TOTAL_CATEGORIES
-    ):
-        raise RuntimeError(
-            "El catálogo debe contener "
-            "exactamente 19 categorías."
-        )
-
-    if (
-        len(COMMAND_CATALOG)
-        != EXPECTED_TOTAL_COMMANDS
-    ):
-        raise RuntimeError(
-            "El catálogo debe contener "
-            "exactamente 72 CMD."
-        )
-
-    if (
-        set(CATEGORY_ORDER)
-        != set(CATEGORY_META)
-    ):
-        raise RuntimeError(
-            "CATEGORY_ORDER y CATEGORY_META "
-            "no coinciden."
-        )
-
-    codes = [
-        item.code
-        for item in COMMAND_CATALOG
-    ]
-
-    commands = [
-        item.command
-        for item in COMMAND_CATALOG
-    ]
-
-    if (
-        len(codes)
-        != len(set(codes))
-    ):
-        raise RuntimeError(
-            "Existen códigos CMD duplicados."
-        )
-
-    if (
-        len(commands)
-        != len(set(commands))
-    ):
-        raise RuntimeError(
-            "Existen comandos duplicados."
-        )
-
-
-_validate_catalog()
-
-
-# =========================================================
-# CATÁLOGO GENERAL
-# =========================================================
-
-def get_all_commands() -> list[CommandItem]:
-    return list(
-        COMMAND_CATALOG
-    )
-
-
-def get_command_by_name(
-    command: str,
-) -> CommandItem | None:
-
-    normalized = (
-        command
-        .strip()
-        .lower()
-    )
-
-    for item in COMMAND_CATALOG:
-
-        if (
-            item.command.lower()
-            == normalized
-        ):
-            return item
-
-    return None
-
-
-def get_command_by_code(
-    code: str,
-) -> CommandItem | None:
-
-    normalized = (
-        code
-        .strip()
-        .upper()
-    )
-
-    for item in COMMAND_CATALOG:
-
-        if (
-            item.code
-            == normalized
-        ):
-            return item
-
-    return None
-
-
-# =========================================================
-# CATEGORÍAS POR VERSIÓN
-# =========================================================
-
-def get_enabled_categories(
-    version: str,
-) -> list[str]:
-
-    version = normalize_version(
-        version
-    )
-
-    amount = (
-        VERSION_CATEGORY_COUNTS[
-            version
-        ]
-    )
-
-    return list(
-        CATEGORY_ORDER[:amount]
-    )
-
-
-def version_has_category(
-    version: str,
-    category: str,
-) -> bool:
-
-    try:
-        normalized_version = (
-            normalize_version(
-                version
+        if len(versions_by_code) != 72:
+            raise RuntimeError(
+                "El sincronizador esperaba "
+                "exactamente 72 CMD."
             )
-        )
 
-    except ValueError:
-        return False
+        for version in cls.VERSIONS:
 
-    normalized_category = (
-        normalize_category(
-            category
-        )
-    )
-
-    return (
-        normalized_category
-        in get_enabled_categories(
-            normalized_version
-        )
-    )
-
-
-# =========================================================
-# REPARTO REAL DE CMD POR VERSIÓN
-# =========================================================
-
-@lru_cache(maxsize=5)
-def _get_version_command_codes(
-    version: str,
-) -> tuple[str, ...]:
-    """
-    Reparte los CMD entre todas las categorías
-    habilitadas.
-
-    Ejemplo:
-    V1 = 10 categorías + exactamente 25 CMD.
-
-    No simplemente toma los primeros 25,
-    porque eso dejaría categorías habilitadas
-    sin ningún comando.
-    """
-
-    version = normalize_version(
-        version
-    )
-
-    categories = (
-        get_enabled_categories(
-            version
-        )
-    )
-
-    target = (
-        VERSION_COMMAND_LIMITS[
-            version
-        ]
-    )
-
-    commands_by_category: dict[
-        str,
-        list[CommandItem],
-    ] = {}
-
-    for category in categories:
-
-        commands_by_category[
-            category
-        ] = [
-            item
-            for item in COMMAND_CATALOG
-            if (
-                item.category
-                == category
-                and item.enabled
-            )
-        ]
-
-    selected: list[str] = []
-
-    position = 0
-
-    while len(selected) < target:
-
-        added = False
-
-        for category in categories:
-
-            commands = (
-                commands_by_category[
-                    category
+            expected = (
+                VERSION_COMMAND_LIMITS[
+                    version
                 ]
             )
 
-            if position >= len(
-                commands
-            ):
-                continue
-
-            selected.append(
-                commands[position].code
+            count = sum(
+                1
+                for versions
+                in versions_by_code.values()
+                if version in versions
             )
 
-            added = True
+            if count != expected:
+                raise RuntimeError(
+                    f"{version} debería tener "
+                    f"{expected} CMD, "
+                    f"pero tiene {count}."
+                )
 
-            if (
-                len(selected)
-                >= target
-            ):
-                break
+    # =====================================================
+    # SINCRONIZAR
+    # =====================================================
 
-        if not added:
-            break
+    async def sync(
+        self,
+        session: AsyncSession,
+    ) -> CatalogSyncResult:
 
-        position += 1
-
-    if len(selected) != target:
-        raise RuntimeError(
-            f"{version} debería tener "
-            f"{target} CMD pero tiene "
-            f"{len(selected)}."
+        versions_by_code = (
+            self._build_versions_map()
         )
 
-    return tuple(
-        selected
-    )
-
-
-def get_version_command_limit(
-    version: str,
-) -> int:
-
-    version = normalize_version(
-        version
-    )
-
-    return (
-        VERSION_COMMAND_LIMITS[
-            version
-        ]
-    )
-
-
-def get_commands_for_version(
-    version: str,
-) -> list[CommandItem]:
-
-    try:
-        version = normalize_version(
-            version
+        self._validate_versions_map(
+            versions_by_code
         )
 
-    except ValueError:
-        return []
-
-    allowed_codes = set(
-        _get_version_command_codes(
-            version
-        )
-    )
-
-    # Conservamos el orden visual
-    # original del catálogo.
-    return [
-        item
-        for item in COMMAND_CATALOG
-        if item.code in allowed_codes
-    ]
-
-
-def version_has_command(
-    version: str,
-    command: str,
-) -> bool:
-
-    normalized = (
-        command
-        .strip()
-        .lower()
-    )
-
-    return any(
-        item.command.lower()
-        == normalized
-        for item
-        in get_commands_for_version(
-            version
-        )
-    )
-
-
-# =========================================================
-# CMD POR CATEGORÍA
-# =========================================================
-
-def get_category_commands(
-    category: str,
-    version: str | None = None,
-) -> list[CommandItem]:
-
-    normalized_category = (
-        normalize_category(
-            category
-        )
-    )
-
-    if version is None:
-
-        return [
-            item
-            for item in COMMAND_CATALOG
-            if (
-                item.category
-                == normalized_category
-                and item.enabled
+        result = await session.execute(
+            select(
+                CommandModel
             )
-        ]
-
-    version_commands = (
-        get_commands_for_version(
-            version
-        )
-    )
-
-    return [
-        item
-        for item in version_commands
-        if (
-            item.category
-            == normalized_category
-            and item.enabled
-        )
-    ]
-
-
-# =========================================================
-# PAGINACIÓN
-# =========================================================
-
-def get_category_page_count(
-    category: str,
-    version: str | None = None,
-) -> int:
-
-    commands = (
-        get_category_commands(
-            category,
-            version,
-        )
-    )
-
-    if not commands:
-        return 0
-
-    return ceil(
-        len(commands)
-        / COMMANDS_PER_PAGE
-    )
-
-
-def get_category_page_commands(
-    category: str,
-    page: int,
-    version: str | None = None,
-) -> list[CommandItem]:
-
-    commands = (
-        get_category_commands(
-            category,
-            version,
-        )
-    )
-
-    if not commands:
-        return []
-
-    total_pages = (
-        get_category_page_count(
-            category,
-            version,
-        )
-    )
-
-    page = max(
-        1,
-        min(
-            page,
-            total_pages,
-        ),
-    )
-
-    start = (
-        (page - 1)
-        * COMMANDS_PER_PAGE
-    )
-
-    end = (
-        start
-        + COMMANDS_PER_PAGE
-    )
-
-    return commands[
-        start:end
-    ]
-
-
-# =========================================================
-# FORMATO DE PÁGINA
-# =========================================================
-
-def get_category_page(
-    category: str,
-    page: int,
-    bot_name: str = "GUARDIAHEXBOT",
-    version: str | None = None,
-) -> str:
-
-    category = (
-        normalize_category(
-            category
-        )
-    )
-
-    meta = CATEGORY_META.get(
-        category
-    )
-
-    if meta is None:
-        return (
-            "⚠️ <b>CATEGORÍA "
-            "NO DISPONIBLE</b>"
         )
 
-    if (
-        version is not None
-        and not version_has_category(
-            version,
-            category,
-        )
-    ):
-        return (
-            "🔒 <b>CATEGORÍA NO DISPONIBLE "
-            "EN ESTA VERSIÓN</b>"
+        existing_commands = list(
+            result.scalars().all()
         )
 
-    commands = (
-        get_category_page_commands(
-            category,
-            page,
-            version,
+        by_code: dict[
+            str,
+            CommandModel,
+        ] = {}
+
+        by_command: dict[
+            str,
+            CommandModel,
+        ] = {}
+
+        for model in existing_commands:
+
+            code = (
+                str(model.code)
+                .strip()
+                .upper()
+            )
+
+            command = (
+                str(model.command)
+                .strip()
+                .lower()
+            )
+
+            by_code[
+                code
+            ] = model
+
+            by_command[
+                command
+            ] = model
+
+        created = 0
+        updated = 0
+        unchanged = 0
+
+        try:
+
+            for sort_order, item in enumerate(
+                COMMAND_CATALOG,
+                start=1,
+            ):
+
+                code = (
+                    item.code
+                    .strip()
+                    .upper()
+                )
+
+                command = (
+                    item.command
+                    .strip()
+                    .lower()
+                )
+
+                available_versions = (
+                    versions_by_code[
+                        code
+                    ]
+                )
+
+                model_by_code = (
+                    by_code.get(
+                        code
+                    )
+                )
+
+                model_by_command = (
+                    by_command.get(
+                        command
+                    )
+                )
+
+                # =========================================
+                # INCONSISTENCIA
+                # =========================================
+
+                if (
+                    model_by_code is not None
+                    and model_by_command is not None
+                    and model_by_code.id
+                    != model_by_command.id
+                ):
+
+                    raise RuntimeError(
+                        "Conflicto en catálogo: "
+                        f"{code} y {command} "
+                        "pertenecen a filas distintas."
+                    )
+
+                model = (
+                    model_by_code
+                    or model_by_command
+                )
+
+                # =========================================
+                # CREAR NUEVO CMD
+                # =========================================
+
+                if model is None:
+
+                    model = CommandModel(
+                        code=code,
+
+                        category=(
+                            item.category
+                            .strip()
+                            .upper()
+                        ),
+
+                        command=command,
+
+                        title=item.title,
+
+                        description=(
+                            "Servicio del catálogo "
+                            "GUARDIAHEXBOT."
+                        ),
+
+                        level=(
+                            item.level
+                        ),
+
+                        price=max(
+                            0,
+                            int(item.price),
+                        ),
+
+                        result_type="TEXT",
+
+                        result_description=(
+                            item.result
+                        ),
+
+                        output_formats=[
+                            "TEXT"
+                        ],
+
+                        # Se configura después
+                        # únicamente con documentación
+                        # autorizada.
+                        provider_key=None,
+
+                        available_versions=(
+                            available_versions
+                        ),
+
+                        enabled_global=(
+                            bool(
+                                item.enabled
+                            )
+                        ),
+
+                        requires_registration=True,
+
+                        requires_authorization=True,
+
+                        charge_on_no_results=True,
+
+                        sort_order=(
+                            sort_order
+                        ),
+                    )
+
+                    session.add(
+                        model
+                    )
+
+                    await session.flush()
+
+                    by_code[
+                        code
+                    ] = model
+
+                    by_command[
+                        command
+                    ] = model
+
+                    created += 1
+
+                    continue
+
+                # =========================================
+                # ACTUALIZAR ESTRUCTURA
+                # =========================================
+
+                changed = False
+
+                expected_category = (
+                    item.category
+                    .strip()
+                    .upper()
+                )
+
+                if model.code != code:
+                    model.code = code
+                    changed = True
+
+                if model.command != command:
+                    model.command = command
+                    changed = True
+
+                if (
+                    model.category
+                    != expected_category
+                ):
+                    model.category = (
+                        expected_category
+                    )
+                    changed = True
+
+                if (
+                    model.available_versions
+                    != available_versions
+                ):
+                    model.available_versions = (
+                        list(
+                            available_versions
+                        )
+                    )
+                    changed = True
+
+                if (
+                    model.sort_order
+                    != sort_order
+                ):
+                    model.sort_order = (
+                        sort_order
+                    )
+                    changed = True
+
+                # Si está vacío, restauramos la
+                # descripción estándar.
+                if not model.result_description:
+                    model.result_description = (
+                        item.result
+                    )
+                    changed = True
+
+                if not model.result_type:
+                    model.result_type = "TEXT"
+                    changed = True
+
+                if not model.output_formats:
+                    model.output_formats = [
+                        "TEXT"
+                    ]
+                    changed = True
+
+                # IMPORTANTE:
+                #
+                # NO sobrescribimos automáticamente:
+                #
+                # model.provider_key
+                # model.price
+                # model.level
+                # model.title
+                # model.enabled_global
+                #
+                # porque pueden haber sido modificados
+                # posteriormente desde el MASTER panel.
+
+                if changed:
+                    updated += 1
+
+                else:
+                    unchanged += 1
+
+            await session.commit()
+
+        except Exception:
+
+            await session.rollback()
+            raise
+
+        # =================================================
+        # VERIFICACIÓN FINAL
+        # =================================================
+
+        count_result = await session.execute(
+            select(
+                CommandModel.id
+            )
         )
-    )
 
-    total_pages = (
-        get_category_page_count(
-            category,
-            version,
-        )
-    )
-
-    if (
-        not commands
-        or total_pages == 0
-    ):
-        return (
-            "⚠️ <b>SIN COMANDOS "
-            "DISPONIBLES</b>"
+        database_total = len(
+            count_result.scalars().all()
         )
 
-    page = max(
-        1,
-        min(
-            page,
-            total_pages,
-        ),
-    )
+        if database_total < 72:
+            raise RuntimeError(
+                "PostgreSQL no contiene "
+                "los 72 CMD esperados."
+            )
 
-    category_title = str(
-        meta["title"]
-    )
+        return CatalogSyncResult(
+            total=len(
+                COMMAND_CATALOG
+            ),
 
-    icon = str(
-        meta["icon"]
-    )
+            created=created,
 
-    total_commands = len(
-        get_category_commands(
-            category,
-            version,
-        )
-    )
+            updated=updated,
 
-    lines: list[str] = [
-        (
-            f"[#{bot_name} 🔎] ➾ "
-            "<b>SISTEMA DE COMANDOS</b>"
-        ),
-        "",
-        (
-            f"CATEGORÍA ➾ "
-            f"<b>{category_title}</b>"
-        ),
-        (
-            f"COMANDOS ➾ "
-            f"<b>{total_commands} "
-            "disponibles</b>"
-        ),
-        (
-            f"PÁGINA ➾ "
-            f"<b>{page}/{total_pages}</b>"
-        ),
-        "",
-        "━━━━━━━━━━━━━━━━━━━━━━━━━━━━",
-    ]
-
-    for item in commands:
-
-        credit_text = (
-            "Crédito"
-            if item.price == 1
-            else "Créditos"
+            unchanged=unchanged,
         )
 
-        lines.extend(
-            [
-                "",
-                (
-                    f"{icon} "
-                    f"<b>{item.title}</b>"
-                ),
-                "",
-                "ESTADO ➾ OPERATIVO ✅",
-                (
-                    "COMANDO ➾ "
-                    f"<code>{item.command}</code>"
-                ),
-                (
-                    "NIVEL ➾ "
-                    f"<b>{item.level}</b>"
-                ),
-                (
-                    "PRECIO ➾ "
-                    f"<b>{item.price} "
-                    f"{credit_text}</b>"
-                ),
-                (
-                    "RESULTADO ➾ "
-                    f"{item.result}"
-                ),
-                "",
-                "━━━━━━━━━━━━━━━━━━━━━━━━━━━━",
-            ]
-        )
 
-    return "\n".join(
-        lines
-    )
-
-
-# =========================================================
-# ESTADÍSTICAS
-# =========================================================
-
-def total_categories() -> int:
-    return len(
-        CATEGORY_ORDER
-    )
-
-
-def total_commands() -> int:
-    return len(
-        COMMAND_CATALOG
-    )
-
-
-def catalog_summary() -> dict[str, int]:
-
-    return {
-        "categories": (
-            total_categories()
-        ),
-        "commands": (
-            total_commands()
-        ),
-        "v1_categories": 10,
-        "v1_commands": 25,
-        "v2_categories": 13,
-        "v2_commands": 40,
-        "v3_categories": 16,
-        "v3_commands": 55,
-        "v4_categories": 18,
-        "v4_commands": 65,
-        "v5_categories": 19,
-        "v5_commands": 72,
-    }
+catalog_sync_service = (
+    CatalogSyncService()
+)
