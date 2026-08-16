@@ -44,6 +44,7 @@ from app.models.bot import BotModel
 
 from app.bots.manager import bot_manager
 from app.services.bot_runtime import bot_runtime_service
+from app.services.catalog_sync import catalog_sync_service
 
 
 # ============================================================
@@ -74,6 +75,49 @@ STATIC_DIR = BASE_DIR / "static"
 templates = Jinja2Templates(
     directory=str(TEMPLATES_DIR)
 )
+
+
+# ============================================================
+# SINCRONIZAR CATÁLOGO
+# ============================================================
+
+async def synchronize_command_catalog() -> None:
+    """
+    Sincroniza catalog.py con PostgreSQL.
+
+    Debe ejecutarse antes de arrancar los bots,
+    ya que query_engine consulta CommandModel
+    directamente desde la base de datos.
+
+    La sincronización es idempotente:
+    reiniciar el servidor no duplica CMD.
+    """
+
+    async with AsyncSessionLocal() as session:
+
+        result = await catalog_sync_service.sync(
+            session
+        )
+
+        print(
+            "[OK] Catálogo CMD sincronizado."
+        )
+
+        print(
+            f"[INFO] CMD catálogo: {result.total}"
+        )
+
+        print(
+            f"[INFO] CMD creados: {result.created}"
+        )
+
+        print(
+            f"[INFO] CMD actualizados: {result.updated}"
+        )
+
+        print(
+            f"[INFO] CMD sin cambios: {result.unchanged}"
+        )
 
 
 # ============================================================
@@ -112,6 +156,7 @@ async def restore_enabled_bots() -> tuple[int, int]:
         )
 
         if not bot_ids:
+
             print(
                 "[INFO] No hay bots habilitados "
                 "para restaurar."
@@ -130,6 +175,7 @@ async def restore_enabled_bots() -> tuple[int, int]:
         for bot_id in bot_ids:
 
             try:
+
                 await bot_runtime_service.start(
                     session,
                     bot_id=bot_id,
@@ -142,9 +188,10 @@ async def restore_enabled_bots() -> tuple[int, int]:
                 )
 
             except Exception as exc:
+
                 failed += 1
 
-                # Nunca imprimir tokens ni secretos.
+                # Nunca mostrar tokens ni secretos.
                 print(
                     f"[ERROR] Bot ID {bot_id} "
                     f"no pudo iniciar: "
@@ -190,6 +237,28 @@ async def lifespan(
     )
 
     # --------------------------------------------------------
+    # CATÁLOGO 72 CMD
+    # --------------------------------------------------------
+
+    try:
+
+        await synchronize_command_catalog()
+
+    except Exception as exc:
+
+        print(
+            "[FATAL] No fue posible sincronizar "
+            "el catálogo de comandos: "
+            f"{type(exc).__name__}"
+        )
+
+        # Sin catálogo válido, los CMD dinámicos
+        # no deben arrancar en un estado inconsistente.
+        await close_db()
+
+        raise
+
+    # --------------------------------------------------------
     # RESTAURAR BOTS
     # --------------------------------------------------------
 
@@ -197,14 +266,17 @@ async def lifespan(
     failed = 0
 
     try:
+
         (
             started,
             failed,
         ) = await restore_enabled_bots()
 
     except Exception as exc:
-        # La plataforma web debe poder iniciar incluso
-        # si ocurre un problema general restaurando bots.
+
+        # FastAPI y el panel pueden seguir
+        # funcionando aunque falle la
+        # restauración global de Telegram.
         print(
             "[ERROR] No fue posible ejecutar "
             "la restauración automática de bots: "
@@ -233,6 +305,7 @@ async def lifespan(
     )
 
     if failed:
+
         print(
             f"[WARN] Bots que no pudieron iniciar: "
             f"{failed}"
@@ -270,6 +343,7 @@ async def lifespan(
 
         # Primero detener Telegram/Aiogram.
         try:
+
             await bot_runtime_service.shutdown_all()
 
             print(
@@ -277,6 +351,7 @@ async def lifespan(
             )
 
         except Exception as exc:
+
             print(
                 "[WARN] Error cerrando runtimes: "
                 f"{type(exc).__name__}"
@@ -589,7 +664,9 @@ async def partner_panel(
 )
 async def health():
 
-    managed_bots = bot_manager.all()
+    managed_bots = (
+        bot_manager.all()
+    )
 
     online_bots = sum(
         1
@@ -602,12 +679,16 @@ async def health():
 
     return {
         "status": "ok",
-        "service": "guardiahex-platform",
+        "service": (
+            "guardiahex-platform"
+        ),
         "version": "1.0.0",
         "bots_loaded": len(
             managed_bots
         ),
-        "bots_online": online_bots,
+        "bots_online": (
+            online_bots
+        ),
     }
 
 
@@ -623,7 +704,9 @@ async def system_info():
 
     return JSONResponse(
         {
-            "app": settings.app_name,
+            "app": (
+                settings.app_name
+            ),
             "platform": (
                 "GUARDIAHEXBOT PLATFORM"
             ),
@@ -632,7 +715,9 @@ async def system_info():
             "environment": (
                 settings.app_env
             ),
-            "database": "postgresql",
+            "database": (
+                "postgresql"
+            ),
             "realtime": (
                 settings.websocket_enabled
             ),
