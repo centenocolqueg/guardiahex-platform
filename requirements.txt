@@ -11,6 +11,7 @@ httpx
 websockets
 passlib[bcrypt]
 python-jose[cryptography]
+cryptography
 itsdangerous
 aiofiles
 python-dotenv
