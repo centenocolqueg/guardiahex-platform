@@ -45,6 +45,10 @@ from app.services.sellers import (
     SellerError,
     seller_service,
 )
+from app.services.subscriptions import (
+    SubscriptionError,
+    subscription_service,
+)
 
 
 # =========================================================
@@ -284,8 +288,6 @@ async def _register_user(
 
         session.add(user)
 
-        # Obtener ID interno antes de crear
-        # RoleModel y TransactionModel.
         await session.flush()
 
         created = True
@@ -453,19 +455,11 @@ async def _effective_role(
     user: UserModel | None = None,
 ) -> str:
 
-    # =====================================================
-    # SUPERADMIN GLOBAL
-    # =====================================================
-
     if _is_global_superadmin(
         telegram_id=telegram_id,
         is_master_bot=is_master_bot,
     ):
         return "SUPERADMIN"
-
-    # =====================================================
-    # USUARIO LOCAL
-    # =====================================================
 
     if user is None:
         user = await _get_user(
@@ -572,10 +566,6 @@ def get_commands_router() -> Router:
 
         if tg_user is None:
             return
-
-        # =================================================
-        # ACTUALIZAR LAST SEEN SI YA EXISTE
-        # =================================================
 
         async with AsyncSessionLocal() as session:
 
@@ -2251,6 +2241,78 @@ def get_commands_router() -> Router:
         if tg_user is None:
             return
 
+        # Admite nombres de plan con espacios.
+        #
+        # /sub 123456789 30 PREMIUM
+        # /sub 123456789 30 PREMIUM PLUS
+
+        parts = (
+            message.text or ""
+        ).split(
+            maxsplit=3
+        )
+
+        if len(parts) != 4:
+
+            await message.answer(
+                "ℹ️ <b>USO CORRECTO</b>\n\n"
+
+                "<code>"
+                "/sub TELEGRAM_ID DIAS PLAN"
+                "</code>\n\n"
+
+                "Ejemplo:\n"
+
+                "<code>"
+                "/sub 123456789 30 PREMIUM"
+                "</code>"
+            )
+
+            return
+
+        target_telegram_id = (
+            _parse_positive_int(
+                parts[1]
+            )
+        )
+
+        days = (
+            _parse_positive_int(
+                parts[2]
+            )
+        )
+
+        plan = (
+            parts[3]
+            .strip()
+            .upper()
+        )
+
+        if target_telegram_id is None:
+
+            await message.answer(
+                "⚠️ Telegram ID inválido."
+            )
+
+            return
+
+        if days is None:
+
+            await message.answer(
+                "⚠️ La cantidad de días "
+                "debe ser mayor que cero."
+            )
+
+            return
+
+        if not plan:
+
+            await message.answer(
+                "⚠️ Debes indicar un plan."
+            )
+
+            return
+
         async with AsyncSessionLocal() as session:
 
             role = await _effective_role(
@@ -2272,20 +2334,124 @@ def get_commands_router() -> Router:
             if not can_use_sub(
                 role
             ):
+
                 await message.answer(
                     "⛔ <b>ACCESO DENEGADO</b>\n\n"
+
                     "Tu rol no puede administrar "
                     "suscripciones."
                 )
 
                 return
 
-        await message.answer(
-            "🛠️ <b>MÓDULO DE SUSCRIPCIONES</b>\n\n"
-            "Permiso validado correctamente.\n\n"
-            "El motor /sub será conectado "
-            "al servicio de suscripciones."
-        )
+            try:
+
+                subscription = (
+                    await subscription_service
+                    .add_subscription(
+                        session,
+
+                        bot_id=(
+                            internal_bot_id
+                        ),
+
+                        target_telegram_id=(
+                            target_telegram_id
+                        ),
+
+                        days=days,
+
+                        plan=plan,
+
+                        activated_by_telegram_id=(
+                            tg_user.id
+                        ),
+
+                        activated_by_role=(
+                            role
+                        ),
+                    )
+                )
+
+                status_data = (
+                    await subscription_service
+                    .get_subscription_status(
+                        session,
+
+                        bot_id=(
+                            internal_bot_id
+                        ),
+
+                        telegram_id=(
+                            target_telegram_id
+                        ),
+                    )
+                )
+
+            except SubscriptionError as exc:
+
+                await message.answer(
+                    "⚠️ <b>SUSCRIPCIÓN RECHAZADA</b>\n\n"
+                    f"{escape(str(exc))}"
+                )
+
+                return
+
+            except Exception:
+
+                await message.answer(
+                    "⚠️ <b>ERROR DE SUSCRIPCIÓN</b>\n\n"
+
+                    "No fue posible completar "
+                    "la operación."
+                )
+
+                return
+
+            expires_at = (
+                subscription.expires_at
+            )
+
+            if expires_at is not None:
+
+                expiration_text = (
+                    expires_at.strftime(
+                        "%d/%m/%Y %H:%M UTC"
+                    )
+                )
+
+            else:
+                expiration_text = (
+                    "No disponible"
+                )
+
+            await message.answer(
+                "✅ <b>SUSCRIPCIÓN ACTIVADA</b>\n"
+                "━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n"
+
+                f"USUARIO ➾ "
+                f"<code>{target_telegram_id}</code>\n"
+
+                f"PLAN ➾ "
+                f"<b>{escape(subscription.plan_name)}</b>\n"
+
+                f"DÍAS AÑADIDOS ➾ "
+                f"<b>{subscription.days_added}</b>\n"
+
+                f"DÍAS RESTANTES ➾ "
+                f"<b>{status_data['remaining_days']}</b>\n"
+
+                f"VENCE ➾ "
+                f"<b>{expiration_text}</b>\n"
+
+                f"CRÉDITOS ➾ "
+                f"<b>{status_data['credits']}</b>\n\n"
+
+                "━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
+
+                "✅ Los créditos permanecen "
+                "sin modificaciones."
+            )
 
     # =====================================================
     # /anuncio
@@ -2329,6 +2495,7 @@ def get_commands_router() -> Router:
                 role,
                 "send_announcements",
             ):
+
                 await message.answer(
                     "⛔ <b>ACCESO DENEGADO</b>"
                 )
@@ -2337,7 +2504,9 @@ def get_commands_router() -> Router:
 
         await message.answer(
             "🛠️ <b>MÓDULO DE ANUNCIOS</b>\n\n"
+
             "Permiso validado correctamente.\n\n"
+
             "El envío masivo será conectado "
             "al módulo correspondiente."
         )
