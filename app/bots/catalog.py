@@ -1,12 +1,25 @@
+from __future__ import annotations
+
 from dataclasses import dataclass
+from functools import lru_cache
 from math import ceil
 
 
 # =========================================================
-# MODELO DE UN CMD
+# CONSTANTES
 # =========================================================
 
-@dataclass(frozen=True)
+EXPECTED_TOTAL_CATEGORIES = 19
+EXPECTED_TOTAL_COMMANDS = 72
+
+COMMANDS_PER_PAGE = 3
+
+
+# =========================================================
+# MODELO CMD
+# =========================================================
+
+@dataclass(frozen=True, slots=True)
 class CommandItem:
     category: str
     code: str
@@ -19,7 +32,7 @@ class CommandItem:
 
 
 # =========================================================
-# CATEGORÍAS PRINCIPALES
+# CATEGORÍAS
 # =========================================================
 
 CATEGORY_ORDER: list[str] = [
@@ -145,7 +158,7 @@ CATEGORY_META: dict[str, dict[str, str | int]] = {
 
 
 # =========================================================
-# VERSIONES V1 - V5
+# VERSIONES
 # =========================================================
 
 VERSION_CATEGORY_COUNTS: dict[str, int] = {
@@ -167,91 +180,215 @@ VERSION_COMMAND_LIMITS: dict[str, int] = {
 
 
 # =========================================================
-# CATÁLOGO BASE
+# NORMALIZACIÓN
+# =========================================================
+
+def normalize_category(
+    category: str,
+) -> str:
+    return (
+        category
+        .strip()
+        .upper()
+        .replace(" ", "_")
+    )
+
+
+def normalize_version(
+    version: str,
+) -> str:
+    """
+    Una versión inválida no debe convertirse
+    silenciosamente en V1.
+    """
+
+    value = (
+        version
+        .strip()
+        .upper()
+    )
+
+    if value not in VERSION_CATEGORY_COUNTS:
+        raise ValueError(
+            f"Versión inválida: {value!r}"
+        )
+
+    return value
+
+
+# =========================================================
+# CONSTRUIR CATÁLOGO
 # =========================================================
 
 def _build_catalog() -> list[CommandItem]:
     """
-    Construye los 72 espacios de CMD del sistema.
+    Crea los 72 espacios lógicos del catálogo.
 
-    Los nombres, precios, nivel y conexión real
-    podrán modificarse posteriormente desde el
-    panel maestro.
-
-    No se colocan URLs ni credenciales del
-    proveedor dentro del código.
+    Continúan siendo servicios genéricos.
+    Los endpoints reales solo deberán configurarse
+    cuando exista documentación autorizada.
     """
 
     catalog: list[CommandItem] = []
 
     for category in CATEGORY_ORDER:
-        meta = CATEGORY_META[category]
 
-        count = int(meta["count"])
-        title = str(meta["title"])
+        meta = CATEGORY_META[
+            category
+        ]
 
-        command_prefix = (
+        count = int(
+            meta["count"]
+        )
+
+        title = str(
+            meta["title"]
+        )
+
+        prefix = (
             category
             .lower()
             .replace("_", "")
         )
 
-        for number in range(1, count + 1):
-            code = f"{category}_{number:02d}"
-
-            command = (
-                f"/{command_prefix}{number}"
-            )
+        for number in range(
+            1,
+            count + 1,
+        ):
 
             catalog.append(
                 CommandItem(
                     category=category,
-                    code=code,
-                    command=command,
-                    title=f"{title} - SERVICIO {number:02d}",
-                    level="CONFIGURABLE",
-                    price=1,
-                    result=(
-                        "RESULTADO AUTORIZADO SEGÚN "
-                        "CONFIGURACIÓN DEL SERVICIO"
+
+                    code=(
+                        f"{category}_"
+                        f"{number:02d}"
                     ),
+
+                    command=(
+                        f"/{prefix}"
+                        f"{number}"
+                    ),
+
+                    title=(
+                        f"{title} - "
+                        f"SERVICIO {number:02d}"
+                    ),
+
+                    level="CONFIGURABLE",
+
+                    price=1,
+
+                    result=(
+                        "RESULTADO AUTORIZADO "
+                        "SEGÚN CONFIGURACIÓN "
+                        "DEL SERVICIO"
+                    ),
+
+                    enabled=True,
                 )
             )
 
     return catalog
 
 
-COMMAND_CATALOG: list[CommandItem] = _build_catalog()
+COMMAND_CATALOG: list[
+    CommandItem
+] = _build_catalog()
 
 
 # =========================================================
-# CONSULTAS DEL CATÁLOGO
+# VALIDACIÓN INTERNA
+# =========================================================
+
+def _validate_catalog() -> None:
+    """
+    Evita arrancar con un catálogo inconsistente.
+    """
+
+    if (
+        len(CATEGORY_ORDER)
+        != EXPECTED_TOTAL_CATEGORIES
+    ):
+        raise RuntimeError(
+            "El catálogo debe contener "
+            "exactamente 19 categorías."
+        )
+
+    if (
+        len(COMMAND_CATALOG)
+        != EXPECTED_TOTAL_COMMANDS
+    ):
+        raise RuntimeError(
+            "El catálogo debe contener "
+            "exactamente 72 CMD."
+        )
+
+    if (
+        set(CATEGORY_ORDER)
+        != set(CATEGORY_META)
+    ):
+        raise RuntimeError(
+            "CATEGORY_ORDER y CATEGORY_META "
+            "no coinciden."
+        )
+
+    codes = [
+        item.code
+        for item in COMMAND_CATALOG
+    ]
+
+    commands = [
+        item.command
+        for item in COMMAND_CATALOG
+    ]
+
+    if (
+        len(codes)
+        != len(set(codes))
+    ):
+        raise RuntimeError(
+            "Existen códigos CMD duplicados."
+        )
+
+    if (
+        len(commands)
+        != len(set(commands))
+    ):
+        raise RuntimeError(
+            "Existen comandos duplicados."
+        )
+
+
+_validate_catalog()
+
+
+# =========================================================
+# CATÁLOGO GENERAL
 # =========================================================
 
 def get_all_commands() -> list[CommandItem]:
-    return COMMAND_CATALOG.copy()
-
-
-def get_category_commands(
-    category: str,
-) -> list[CommandItem]:
-    category = category.upper()
-
-    return [
-        item
-        for item in COMMAND_CATALOG
-        if item.category == category
-        and item.enabled
-    ]
+    return list(
+        COMMAND_CATALOG
+    )
 
 
 def get_command_by_name(
     command: str,
 ) -> CommandItem | None:
-    normalized = command.strip().lower()
+
+    normalized = (
+        command
+        .strip()
+        .lower()
+    )
 
     for item in COMMAND_CATALOG:
-        if item.command.lower() == normalized:
+
+        if (
+            item.command.lower()
+            == normalized
+        ):
             return item
 
     return None
@@ -260,143 +397,342 @@ def get_command_by_name(
 def get_command_by_code(
     code: str,
 ) -> CommandItem | None:
-    normalized = code.strip().upper()
+
+    normalized = (
+        code
+        .strip()
+        .upper()
+    )
 
     for item in COMMAND_CATALOG:
-        if item.code == normalized:
+
+        if (
+            item.code
+            == normalized
+        ):
             return item
 
     return None
 
 
 # =========================================================
-# VERSIONES
+# CATEGORÍAS POR VERSIÓN
 # =========================================================
-
-def normalize_version(
-    version: str,
-) -> str:
-    value = version.strip().upper()
-
-    if value not in VERSION_CATEGORY_COUNTS:
-        return "V1"
-
-    return value
-
 
 def get_enabled_categories(
     version: str,
 ) -> list[str]:
-    """
-    V1 → primeras 10 categorías
-    V2 → primeras 13
-    V3 → primeras 16
-    V4 → primeras 18
-    V5 → las 19
-    """
 
-    version = normalize_version(version)
-
-    amount = VERSION_CATEGORY_COUNTS[version]
-
-    return CATEGORY_ORDER[:amount]
-
-
-def get_version_command_limit(
-    version: str,
-) -> int:
-    version = normalize_version(version)
-
-    return VERSION_COMMAND_LIMITS[version]
-
-
-def get_commands_for_version(
-    version: str,
-) -> list[CommandItem]:
-    """
-    Devuelve únicamente los CMD correspondientes
-    a la versión seleccionada.
-    """
-
-    version = normalize_version(version)
-
-    categories = set(
-        get_enabled_categories(version)
+    version = normalize_version(
+        version
     )
 
-    command_limit = (
-        VERSION_COMMAND_LIMITS[version]
+    amount = (
+        VERSION_CATEGORY_COUNTS[
+            version
+        ]
     )
 
-    available = [
-        command
-        for command in COMMAND_CATALOG
-        if command.category in categories
-        and command.enabled
-    ]
-
-    return available[:command_limit]
+    return list(
+        CATEGORY_ORDER[:amount]
+    )
 
 
 def version_has_category(
     version: str,
     category: str,
 ) -> bool:
-    category = category.upper()
 
-    return category in get_enabled_categories(
+    try:
+        normalized_version = (
+            normalize_version(
+                version
+            )
+        )
+
+    except ValueError:
+        return False
+
+    normalized_category = (
+        normalize_category(
+            category
+        )
+    )
+
+    return (
+        normalized_category
+        in get_enabled_categories(
+            normalized_version
+        )
+    )
+
+
+# =========================================================
+# REPARTO REAL DE CMD POR VERSIÓN
+# =========================================================
+
+@lru_cache(maxsize=5)
+def _get_version_command_codes(
+    version: str,
+) -> tuple[str, ...]:
+    """
+    Reparte los CMD entre todas las categorías
+    habilitadas.
+
+    Ejemplo:
+    V1 = 10 categorías + exactamente 25 CMD.
+
+    No simplemente toma los primeros 25,
+    porque eso dejaría categorías habilitadas
+    sin ningún comando.
+    """
+
+    version = normalize_version(
         version
     )
+
+    categories = (
+        get_enabled_categories(
+            version
+        )
+    )
+
+    target = (
+        VERSION_COMMAND_LIMITS[
+            version
+        ]
+    )
+
+    commands_by_category: dict[
+        str,
+        list[CommandItem],
+    ] = {}
+
+    for category in categories:
+
+        commands_by_category[
+            category
+        ] = [
+            item
+            for item in COMMAND_CATALOG
+            if (
+                item.category
+                == category
+                and item.enabled
+            )
+        ]
+
+    selected: list[str] = []
+
+    position = 0
+
+    while len(selected) < target:
+
+        added = False
+
+        for category in categories:
+
+            commands = (
+                commands_by_category[
+                    category
+                ]
+            )
+
+            if position >= len(
+                commands
+            ):
+                continue
+
+            selected.append(
+                commands[position].code
+            )
+
+            added = True
+
+            if (
+                len(selected)
+                >= target
+            ):
+                break
+
+        if not added:
+            break
+
+        position += 1
+
+    if len(selected) != target:
+        raise RuntimeError(
+            f"{version} debería tener "
+            f"{target} CMD pero tiene "
+            f"{len(selected)}."
+        )
+
+    return tuple(
+        selected
+    )
+
+
+def get_version_command_limit(
+    version: str,
+) -> int:
+
+    version = normalize_version(
+        version
+    )
+
+    return (
+        VERSION_COMMAND_LIMITS[
+            version
+        ]
+    )
+
+
+def get_commands_for_version(
+    version: str,
+) -> list[CommandItem]:
+
+    try:
+        version = normalize_version(
+            version
+        )
+
+    except ValueError:
+        return []
+
+    allowed_codes = set(
+        _get_version_command_codes(
+            version
+        )
+    )
+
+    # Conservamos el orden visual
+    # original del catálogo.
+    return [
+        item
+        for item in COMMAND_CATALOG
+        if item.code in allowed_codes
+    ]
 
 
 def version_has_command(
     version: str,
     command: str,
 ) -> bool:
-    normalized = command.lower()
+
+    normalized = (
+        command
+        .strip()
+        .lower()
+    )
 
     return any(
-        item.command.lower() == normalized
-        for item in get_commands_for_version(version)
+        item.command.lower()
+        == normalized
+        for item
+        in get_commands_for_version(
+            version
+        )
     )
+
+
+# =========================================================
+# CMD POR CATEGORÍA
+# =========================================================
+
+def get_category_commands(
+    category: str,
+    version: str | None = None,
+) -> list[CommandItem]:
+
+    normalized_category = (
+        normalize_category(
+            category
+        )
+    )
+
+    if version is None:
+
+        return [
+            item
+            for item in COMMAND_CATALOG
+            if (
+                item.category
+                == normalized_category
+                and item.enabled
+            )
+        ]
+
+    version_commands = (
+        get_commands_for_version(
+            version
+        )
+    )
+
+    return [
+        item
+        for item in version_commands
+        if (
+            item.category
+            == normalized_category
+            and item.enabled
+        )
+    ]
 
 
 # =========================================================
 # PAGINACIÓN
 # =========================================================
 
-COMMANDS_PER_PAGE = 3
-
-
 def get_category_page_count(
     category: str,
+    version: str | None = None,
 ) -> int:
-    commands = get_category_commands(category)
+
+    commands = (
+        get_category_commands(
+            category,
+            version,
+        )
+    )
 
     if not commands:
         return 0
 
     return ceil(
-        len(commands) / COMMANDS_PER_PAGE
+        len(commands)
+        / COMMANDS_PER_PAGE
     )
 
 
 def get_category_page_commands(
     category: str,
     page: int,
+    version: str | None = None,
 ) -> list[CommandItem]:
-    commands = get_category_commands(category)
+
+    commands = (
+        get_category_commands(
+            category,
+            version,
+        )
+    )
 
     if not commands:
         return []
 
-    total_pages = get_category_page_count(
-        category
+    total_pages = (
+        get_category_page_count(
+            category,
+            version,
+        )
     )
 
     page = max(
         1,
-        min(page, total_pages),
+        min(
+            page,
+            total_pages,
+        ),
     )
 
     start = (
@@ -404,9 +740,14 @@ def get_category_page_commands(
         * COMMANDS_PER_PAGE
     )
 
-    end = start + COMMANDS_PER_PAGE
+    end = (
+        start
+        + COMMANDS_PER_PAGE
+    )
 
-    return commands[start:end]
+    return commands[
+        start:end
+    ]
 
 
 # =========================================================
@@ -417,33 +758,67 @@ def get_category_page(
     category: str,
     page: int,
     bot_name: str = "GUARDIAHEXBOT",
+    version: str | None = None,
 ) -> str:
-    category = category.upper()
 
-    meta = CATEGORY_META.get(category)
-
-    if not meta:
-        return (
-            "⚠️ <b>CATEGORÍA NO DISPONIBLE</b>"
+    category = (
+        normalize_category(
+            category
         )
-
-    commands = get_category_page_commands(
-        category,
-        page,
     )
 
-    total_pages = get_category_page_count(
+    meta = CATEGORY_META.get(
         category
     )
 
-    if not commands or total_pages == 0:
+    if meta is None:
         return (
-            "⚠️ <b>SIN COMANDOS DISPONIBLES</b>"
+            "⚠️ <b>CATEGORÍA "
+            "NO DISPONIBLE</b>"
+        )
+
+    if (
+        version is not None
+        and not version_has_category(
+            version,
+            category,
+        )
+    ):
+        return (
+            "🔒 <b>CATEGORÍA NO DISPONIBLE "
+            "EN ESTA VERSIÓN</b>"
+        )
+
+    commands = (
+        get_category_page_commands(
+            category,
+            page,
+            version,
+        )
+    )
+
+    total_pages = (
+        get_category_page_count(
+            category,
+            version,
+        )
+    )
+
+    if (
+        not commands
+        or total_pages == 0
+    ):
+        return (
+            "⚠️ <b>SIN COMANDOS "
+            "DISPONIBLES</b>"
         )
 
     page = max(
         1,
-        min(page, total_pages),
+        min(
+            page,
+            total_pages,
+        ),
     )
 
     category_title = str(
@@ -455,17 +830,26 @@ def get_category_page(
     )
 
     total_commands = len(
-        get_category_commands(category)
+        get_category_commands(
+            category,
+            version,
+        )
     )
 
     lines: list[str] = [
-        f"[#{bot_name} 🔎] ➾ "
-        "<b>SISTEMA DE COMANDOS</b>",
+        (
+            f"[#{bot_name} 🔎] ➾ "
+            "<b>SISTEMA DE COMANDOS</b>"
+        ),
         "",
-        f"CATEGORÍA ➾ <b>{category_title}</b>",
+        (
+            f"CATEGORÍA ➾ "
+            f"<b>{category_title}</b>"
+        ),
         (
             f"COMANDOS ➾ "
-            f"<b>{total_commands} disponibles</b>"
+            f"<b>{total_commands} "
+            "disponibles</b>"
         ),
         (
             f"PÁGINA ➾ "
@@ -476,6 +860,13 @@ def get_category_page(
     ]
 
     for item in commands:
+
+        credit_text = (
+            "Crédito"
+            if item.price == 1
+            else "Créditos"
+        )
+
         lines.extend(
             [
                 "",
@@ -486,24 +877,20 @@ def get_category_page(
                 "",
                 "ESTADO ➾ OPERATIVO ✅",
                 (
-                    f"COMANDO ➾ "
+                    "COMANDO ➾ "
                     f"<code>{item.command}</code>"
                 ),
                 (
-                    f"NIVEL ➾ "
+                    "NIVEL ➾ "
                     f"<b>{item.level}</b>"
                 ),
                 (
-                    f"PRECIO ➾ "
-                    f"<b>{item.price} Crédito</b>"
-                    if item.price == 1
-                    else (
-                        f"PRECIO ➾ "
-                        f"<b>{item.price} Créditos</b>"
-                    )
+                    "PRECIO ➾ "
+                    f"<b>{item.price} "
+                    f"{credit_text}</b>"
                 ),
                 (
-                    f"RESULTADO ➾ "
+                    "RESULTADO ➾ "
                     f"{item.result}"
                 ),
                 "",
@@ -511,28 +898,44 @@ def get_category_page(
             ]
         )
 
-    return "\n".join(lines)
+    return "\n".join(
+        lines
+    )
 
 
 # =========================================================
-# ESTADÍSTICAS DEL CATÁLOGO
+# ESTADÍSTICAS
 # =========================================================
 
 def total_categories() -> int:
-    return len(CATEGORY_ORDER)
+    return len(
+        CATEGORY_ORDER
+    )
 
 
 def total_commands() -> int:
-    return len(COMMAND_CATALOG)
+    return len(
+        COMMAND_CATALOG
+    )
 
 
 def catalog_summary() -> dict[str, int]:
+
     return {
-        "categories": total_categories(),
-        "commands": total_commands(),
-        "v1_commands": VERSION_COMMAND_LIMITS["V1"],
-        "v2_commands": VERSION_COMMAND_LIMITS["V2"],
-        "v3_commands": VERSION_COMMAND_LIMITS["V3"],
-        "v4_commands": VERSION_COMMAND_LIMITS["V4"],
-        "v5_commands": VERSION_COMMAND_LIMITS["V5"],
+        "categories": (
+            total_categories()
+        ),
+        "commands": (
+            total_commands()
+        ),
+        "v1_categories": 10,
+        "v1_commands": 25,
+        "v2_categories": 13,
+        "v2_commands": 40,
+        "v3_categories": 16,
+        "v3_commands": 55,
+        "v4_categories": 18,
+        "v4_commands": 65,
+        "v5_categories": 19,
+        "v5_commands": 72,
     }
