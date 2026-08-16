@@ -8,7 +8,9 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.bots.manager import ManagedBot, bot_manager
 from app.bots.middleware import setup_middlewares
 from app.bots.router import attach_root_router
+from app.config import settings
 from app.models.bot import BotModel
+from app.security import decrypt_bot_token
 
 
 class BotRuntimeError(Exception):
@@ -16,28 +18,19 @@ class BotRuntimeError(Exception):
 
 
 class BotNotFoundError(BotRuntimeError):
-    """El bot no existe en la base de datos."""
+    """El bot no existe en PostgreSQL."""
 
 
 class BotTokenRequiredError(BotRuntimeError):
-    """No se proporcionó un token válido para iniciar el bot."""
+    """El bot no tiene un token Telegram configurado."""
 
 
 class BotRuntimeService:
     """
-    Conecta la configuración guardada en PostgreSQL
-    con el BotManager que mantiene los bots activos
-    dentro del servidor.
+    Motor que conecta PostgreSQL con Aiogram.
 
-    Permite:
-    - registrar un bot en memoria;
-    - encenderlo;
-    - apagarlo;
-    - reiniciarlo;
-    - sincronizar su estado;
-    - actualizar fechas de inicio/apagado.
-
-    Cada bot continúa aislado mediante bot_id.
+    Los tokens permanecen cifrados en PostgreSQL
+    y solamente se descifran temporalmente en memoria.
     """
 
     # =====================================================
@@ -49,19 +42,12 @@ class BotRuntimeService:
         session: AsyncSession,
         *,
         bot_id: int,
-        lock: bool = False,
     ) -> BotModel:
-        statement = select(
-            BotModel
-        ).where(
-            BotModel.id == bot_id
-        )
-
-        if lock:
-            statement = statement.with_for_update()
 
         result = await session.execute(
-            statement
+            select(BotModel).where(
+                BotModel.id == bot_id
+            )
         )
 
         bot_model = result.scalar_one_or_none()
@@ -74,7 +60,54 @@ class BotRuntimeService:
         return bot_model
 
     # =====================================================
-    # REGISTRAR BOT EN EL MOTOR
+    # RESOLVER TOKEN PRIVADO
+    # =====================================================
+
+    def resolve_token(
+        self,
+        bot_model: BotModel,
+        *,
+        token: str | None = None,
+    ) -> str:
+        """
+        Prioridad:
+
+        1. Token entregado internamente.
+        2. Token cifrado almacenado en PostgreSQL.
+        3. MASTER_BOT_TOKEN para el bot MASTER.
+        """
+
+        if token:
+            clean_token = token.strip()
+
+            if clean_token:
+                return clean_token
+
+        if bot_model.token_encrypted:
+            try:
+                return decrypt_bot_token(
+                    bot_model.token_encrypted
+                )
+
+            except Exception as exc:
+                raise BotTokenRequiredError(
+                    "No se pudo descifrar "
+                    "el token del bot."
+                ) from exc
+
+        if (
+            bot_model.is_master
+            and settings.master_bot_token.strip()
+        ):
+            return settings.master_bot_token.strip()
+
+        raise BotTokenRequiredError(
+            "El bot no tiene un token "
+            "Telegram configurado."
+        )
+
+    # =====================================================
+    # REGISTRAR EN MEMORIA
     # =====================================================
 
     async def register(
@@ -82,22 +115,8 @@ class BotRuntimeService:
         session: AsyncSession,
         *,
         bot_id: int,
-        token: str,
+        token: str | None = None,
     ) -> ManagedBot:
-        """
-        Registra un bot de PostgreSQL dentro
-        del motor en memoria.
-
-        El token debe llegar ya resuelto desde
-        una fuente privada segura.
-        """
-
-        token = token.strip()
-
-        if not token:
-            raise BotTokenRequiredError(
-                "Se necesita el token privado del bot."
-            )
 
         bot_model = await self.get_bot(
             session,
@@ -111,32 +130,56 @@ class BotRuntimeService:
         if existing is not None:
             return existing
 
-        managed = await bot_manager.register_bot(
-            bot_id=bot_model.id,
+        resolved_token = self.resolve_token(
+            bot_model,
             token=token,
-            username=bot_model.username,
-            is_master=bot_model.is_master,
-            enabled=bot_model.enabled,
         )
 
-        # Todos los bots usan el mismo motor lógico.
-        attach_root_router(
-            managed.dispatcher
-        )
+        try:
+            managed = await bot_manager.register_bot(
+                bot_id=bot_model.id,
+                token=resolved_token,
+                username=bot_model.username,
+                is_master=bot_model.is_master,
+                enabled=False,
+            )
 
-        # Pero cada uno recibe su propio contexto.
-        setup_middlewares(
-            dispatcher=managed.dispatcher,
-            internal_bot_id=bot_model.id,
-            version=bot_model.version,
-            is_master=bot_model.is_master,
-            maintenance=bot_model.maintenance,
-        )
+            if managed.dispatcher is None:
+                raise BotRuntimeError(
+                    "No se pudo crear el Dispatcher."
+                )
 
-        return managed
+            attach_root_router(
+                managed.dispatcher
+            )
+
+            setup_middlewares(
+                dispatcher=managed.dispatcher,
+                internal_bot_id=bot_model.id,
+                version=bot_model.version,
+                is_master=bot_model.is_master,
+                maintenance=(
+                    bot_model.maintenance_mode
+                ),
+            )
+
+            return managed
+
+        except Exception:
+            if bot_manager.exists(
+                bot_model.id
+            ):
+                try:
+                    await bot_manager.unregister_bot(
+                        bot_model.id
+                    )
+                except Exception:
+                    pass
+
+            raise
 
     # =====================================================
-    # ENCENDER BOT
+    # ENCENDER
     # =====================================================
 
     async def start(
@@ -147,54 +190,96 @@ class BotRuntimeService:
         token: str | None = None,
     ) -> bool:
         """
-        Inicia polling para un bot.
+        Primero arranca realmente Aiogram.
 
-        Si todavía no está registrado en memoria,
-        será necesario proporcionar su token.
+        PostgreSQL solamente cambia a enabled=True
+        después de confirmar el arranque.
         """
 
         bot_model = await self.get_bot(
             session,
             bot_id=bot_id,
-            lock=True,
         )
 
         managed = bot_manager.get(
             bot_model.id
         )
 
-        if managed is None:
-            if not token:
-                raise BotTokenRequiredError(
-                    "El bot todavía no está cargado "
-                    "y necesita su token privado."
-                )
+        newly_registered = False
 
+        if managed is None:
             managed = await self.register(
                 session,
                 bot_id=bot_model.id,
                 token=token,
             )
 
+            newly_registered = True
+
+        managed.enabled = True
+
         try:
-            managed.enabled = True
-            bot_model.enabled = True
-            bot_model.last_started_at = datetime.now(
-                timezone.utc
-            )
-
-            await session.commit()
-
-            return await bot_manager.start_bot(
+            started = await bot_manager.start_bot(
                 bot_model.id
             )
 
+            if not started:
+                raise BotRuntimeError(
+                    "El bot no pudo iniciar."
+                )
+
+            # start_bot() ya ejecutó get_me().
+            # Guardamos los datos oficiales obtenidos.
+            if managed.bot is not None:
+                bot_info = await managed.bot.get_me()
+
+                bot_model.telegram_bot_id = (
+                    bot_info.id
+                )
+
+                if bot_info.username:
+                    bot_model.username = (
+                        bot_info.username.lower()
+                    )
+
+            bot_model.enabled = True
+
+            bot_model.last_started_at = (
+                datetime.now(timezone.utc)
+            )
+
+            await session.commit()
+            await session.refresh(
+                bot_model
+            )
+
+            return True
+
         except Exception:
+            managed.enabled = False
+
+            try:
+                if bot_manager.status(
+                    bot_model.id
+                ) == "ONLINE":
+                    await bot_manager.stop_bot(
+                        bot_model.id
+                    )
+
+                if newly_registered:
+                    await bot_manager.unregister_bot(
+                        bot_model.id
+                    )
+
+            except Exception:
+                pass
+
             await session.rollback()
+
             raise
 
     # =====================================================
-    # APAGAR BOT
+    # APAGAR
     # =====================================================
 
     async def stop(
@@ -203,15 +288,10 @@ class BotRuntimeService:
         *,
         bot_id: int,
     ) -> bool:
-        """
-        Apaga un bot y mantiene su configuración
-        almacenada en PostgreSQL.
-        """
 
         bot_model = await self.get_bot(
             session,
             bot_id=bot_id,
-            lock=True,
         )
 
         managed = bot_manager.get(
@@ -219,28 +299,32 @@ class BotRuntimeService:
         )
 
         try:
+            if managed is not None:
+                managed.enabled = False
+
+                await bot_manager.stop_bot(
+                    bot_model.id
+                )
+
             bot_model.enabled = False
-            bot_model.last_stopped_at = datetime.now(
-                timezone.utc
+
+            bot_model.last_stopped_at = (
+                datetime.now(timezone.utc)
             )
 
             await session.commit()
-
-            if managed is None:
-                return True
-
-            managed.enabled = False
-
-            return await bot_manager.stop_bot(
-                bot_model.id
+            await session.refresh(
+                bot_model
             )
+
+            return True
 
         except Exception:
             await session.rollback()
             raise
 
     # =====================================================
-    # REINICIAR BOT
+    # REINICIAR
     # =====================================================
 
     async def restart(
@@ -250,52 +334,38 @@ class BotRuntimeService:
         bot_id: int,
         token: str | None = None,
     ) -> bool:
-        """
-        Reinicia un bot manteniendo la misma
-        configuración.
-        """
 
         bot_model = await self.get_bot(
             session,
             bot_id=bot_id,
         )
 
-        managed = bot_manager.get(
-            bot_model.id
+        resolved_token = self.resolve_token(
+            bot_model,
+            token=token,
         )
 
-        if managed is None:
-            if not token:
-                raise BotTokenRequiredError(
-                    "Se necesita el token para cargar el bot."
-                )
-
-            await self.register(
-                session,
-                bot_id=bot_model.id,
-                token=token,
-            )
-
-        try:
-            result = await bot_manager.restart_bot(
+        if bot_manager.exists(
+            bot_model.id
+        ):
+            await bot_manager.unregister_bot(
                 bot_model.id
             )
 
-            bot_model.enabled = True
-            bot_model.last_started_at = datetime.now(
-                timezone.utc
-            )
+        await self.register(
+            session,
+            bot_id=bot_model.id,
+            token=resolved_token,
+        )
 
-            await session.commit()
-
-            return result
-
-        except Exception:
-            await session.rollback()
-            raise
+        return await self.start(
+            session,
+            bot_id=bot_model.id,
+            token=resolved_token,
+        )
 
     # =====================================================
-    # CAMBIAR ESTADO ON/OFF
+    # ON / OFF
     # =====================================================
 
     async def set_enabled(
@@ -306,12 +376,6 @@ class BotRuntimeService:
         enabled: bool,
         token: str | None = None,
     ) -> bool:
-        """
-        Función utilizada por los paneles.
-
-        enabled=True  -> encender
-        enabled=False -> apagar
-        """
 
         if enabled:
             return await self.start(
@@ -335,14 +399,21 @@ class BotRuntimeService:
         *,
         bot_id: int,
     ) -> dict:
+
         bot_model = await self.get_bot(
             session,
             bot_id=bot_id,
         )
 
-        runtime_status = bot_manager.status(
-            bot_model.id
+        token_configured = (
+            bot_model.token_configured
         )
+
+        if (
+            bot_model.is_master
+            and settings.master_bot_token.strip()
+        ):
+            token_configured = True
 
         return {
             "bot_id": bot_model.id,
@@ -351,14 +422,30 @@ class BotRuntimeService:
             "version": bot_model.version,
             "is_master": bot_model.is_master,
             "database_enabled": bot_model.enabled,
-            "maintenance": bot_model.maintenance,
-            "runtime_status": runtime_status,
-            "last_started_at": bot_model.last_started_at,
-            "last_stopped_at": bot_model.last_stopped_at,
+            "maintenance": (
+                bot_model.maintenance_mode
+            ),
+            "token_configured": token_configured,
+            "runtime_status": (
+                bot_manager.status(
+                    bot_model.id
+                )
+            ),
+            "runtime_error": (
+                bot_manager.last_error(
+                    bot_model.id
+                )
+            ),
+            "last_started_at": (
+                bot_model.last_started_at
+            ),
+            "last_stopped_at": (
+                bot_model.last_stopped_at
+            ),
         }
 
     # =====================================================
-    # ACTUALIZAR VERSIÓN EN RUNTIME
+    # ACTUALIZAR VERSIÓN
     # =====================================================
 
     async def update_version(
@@ -368,26 +455,16 @@ class BotRuntimeService:
         bot_id: int,
         version: str,
     ) -> BotModel:
-        """
-        Guarda la nueva versión.
-
-        V1, V2, V3, V4 o V5.
-
-        El SUPERADMIN será quien tenga permiso
-        para ejecutar esta operación.
-        """
 
         version = version.strip().upper()
 
-        allowed = {
+        if version not in {
             "V1",
             "V2",
             "V3",
             "V4",
             "V5",
-        }
-
-        if version not in allowed:
+        }:
             raise BotRuntimeError(
                 "Versión de bot inválida."
             )
@@ -395,7 +472,13 @@ class BotRuntimeService:
         bot_model = await self.get_bot(
             session,
             bot_id=bot_id,
-            lock=True,
+        )
+
+        was_online = (
+            bot_manager.status(
+                bot_model.id
+            )
+            == "ONLINE"
         )
 
         try:
@@ -406,11 +489,24 @@ class BotRuntimeService:
                 bot_model
             )
 
-            return bot_model
-
         except Exception:
             await session.rollback()
             raise
+
+        if bot_manager.exists(
+            bot_model.id
+        ):
+            if was_online:
+                await self.restart(
+                    session,
+                    bot_id=bot_model.id,
+                )
+            else:
+                await bot_manager.unregister_bot(
+                    bot_model.id
+                )
+
+        return bot_model
 
     # =====================================================
     # MANTENIMIENTO
@@ -424,19 +520,25 @@ class BotRuntimeService:
         enabled: bool,
         message: str | None = None,
     ) -> BotModel:
+
         bot_model = await self.get_bot(
             session,
             bot_id=bot_id,
-            lock=True,
+        )
+
+        was_online = (
+            bot_manager.status(
+                bot_model.id
+            )
+            == "ONLINE"
         )
 
         try:
-            bot_model.maintenance = enabled
+            bot_model.maintenance_mode = enabled
 
             if message is not None:
                 bot_model.maintenance_message = (
-                    message.strip()
-                    or None
+                    message.strip() or None
                 )
 
             await session.commit()
@@ -444,21 +546,34 @@ class BotRuntimeService:
                 bot_model
             )
 
-            return bot_model
-
         except Exception:
             await session.rollback()
             raise
 
+        # El middleware recibe maintenance
+        # al crear el Dispatcher.
+        if bot_manager.exists(
+            bot_model.id
+        ):
+            if was_online:
+                await self.restart(
+                    session,
+                    bot_id=bot_model.id,
+                )
+            else:
+                await bot_manager.unregister_bot(
+                    bot_model.id
+                )
+
+        return bot_model
+
     # =====================================================
-    # APAGAR TODO
+    # APAGAR TODOS
     # =====================================================
 
-    async def shutdown_all(self) -> None:
-        """
-        Se utilizará al apagar FastAPI/systemd
-        para cerrar correctamente todos los bots.
-        """
+    async def shutdown_all(
+        self,
+    ) -> None:
 
         await bot_manager.shutdown_all()
 
