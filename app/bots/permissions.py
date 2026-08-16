@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 from enum import StrEnum
 
 
@@ -31,12 +33,11 @@ ROLE_LEVELS: dict[Role, int] = {
 
 
 # =========================================================
-# PERMISOS PRINCIPALES
+# GRUPOS DE ROLES
 # =========================================================
 
-PERMISSIONS: dict[str, set[Role]] = {
-    # Consultas generales
-    "use_queries": {
+ALL_ROLES = frozenset(
+    {
         Role.USER,
         Role.SELLER,
         Role.ADMIN,
@@ -44,187 +45,250 @@ PERMISSIONS: dict[str, set[Role]] = {
         Role.FOUNDER,
         Role.OWNER,
         Role.SUPERADMIN,
-    },
+    }
+)
 
-    # Ver perfil
-    "view_me": {
-        Role.USER,
-        Role.SELLER,
+
+STAFF_ROLES = frozenset(
+    {
         Role.ADMIN,
         Role.COFOUNDER,
         Role.FOUNDER,
         Role.OWNER,
         Role.SUPERADMIN,
-    },
+    }
+)
 
-    # Ver catálogo /cmds
-    "view_commands": {
-        Role.USER,
-        Role.SELLER,
-        Role.ADMIN,
+
+MANAGEMENT_ROLES = frozenset(
+    {
         Role.COFOUNDER,
         Role.FOUNDER,
         Role.OWNER,
         Role.SUPERADMIN,
-    },
+    }
+)
 
-    # Ver planes /buy
-    "view_buy": {
-        Role.USER,
-        Role.SELLER,
-        Role.ADMIN,
-        Role.COFOUNDER,
-        Role.FOUNDER,
-        Role.OWNER,
-        Role.SUPERADMIN,
-    },
 
-    # Añadir / transferir créditos
-    "use_cred": {
-        Role.SELLER,
-        Role.ADMIN,
-        Role.COFOUNDER,
-        Role.FOUNDER,
-        Role.OWNER,
-        Role.SUPERADMIN,
-    },
+# =========================================================
+# PERMISOS
+# =========================================================
 
-    # Crear/quitar seller
-    "manage_sellers": {
-        Role.COFOUNDER,
-        Role.FOUNDER,
-        Role.OWNER,
-        Role.SUPERADMIN,
-    },
+PERMISSIONS: dict[str, frozenset[Role]] = {
 
-    # Suscripciones /sub
-    "manage_subscriptions": {
-        Role.ADMIN,
-        Role.COFOUNDER,
-        Role.FOUNDER,
-        Role.OWNER,
-        Role.SUPERADMIN,
-    },
+    # -----------------------------------------------------
+    # USUARIO GENERAL
+    # -----------------------------------------------------
 
-    # Ban / unban
-    "manage_bans": {
-        Role.ADMIN,
-        Role.COFOUNDER,
-        Role.FOUNDER,
-        Role.OWNER,
-        Role.SUPERADMIN,
-    },
+    "use_queries": ALL_ROLES,
 
-    # Anuncios
-    "send_announcements": {
-        Role.ADMIN,
-        Role.COFOUNDER,
-        Role.FOUNDER,
-        Role.OWNER,
-        Role.SUPERADMIN,
-    },
+    "view_me": ALL_ROLES,
 
-    # Estadísticas del bot
-    "view_statistics": {
-        Role.ADMIN,
-        Role.COFOUNDER,
-        Role.FOUNDER,
-        Role.OWNER,
-        Role.SUPERADMIN,
-    },
+    "view_commands": ALL_ROLES,
 
-    # Ver staff
-    "view_staff": {
-        Role.ADMIN,
-        Role.COFOUNDER,
-        Role.FOUNDER,
-        Role.OWNER,
-        Role.SUPERADMIN,
-    },
+    "view_buy": ALL_ROLES,
 
-    # Encender/apagar bot propio
-    "toggle_own_bot": {
-        Role.OWNER,
-        Role.SUPERADMIN,
-    },
 
-    # Gestionar fundadores/cofundadores
-    "manage_founders": {
-        Role.OWNER,
-        Role.SUPERADMIN,
-    },
+    # -----------------------------------------------------
+    # CRÉDITOS
+    # -----------------------------------------------------
 
-    # Cambiar grupo/canal del bot propio
-    "manage_group_channel": {
-        Role.OWNER,
-        Role.SUPERADMIN,
-    },
+    # Puede ejecutar el flujo /cred.
+    #
+    # SELLER:
+    # solamente transfiere desde su saldo.
+    #
+    # Los demás roles autorizados podrán tener
+    # capacidades administrativas según el servicio.
+    "use_cred": frozenset(
+        {
+            Role.SELLER,
+            Role.ADMIN,
+            Role.COFOUNDER,
+            Role.FOUNDER,
+            Role.OWNER,
+            Role.SUPERADMIN,
+        }
+    ),
 
-    # Cambiar versión V1-V5
-    "manage_version": {
-        Role.SUPERADMIN,
-    },
+    # Transferencia de saldo existente.
+    "transfer_credits": frozenset(
+        {
+            Role.SELLER,
+            Role.ADMIN,
+            Role.COFOUNDER,
+            Role.FOUNDER,
+            Role.OWNER,
+            Role.SUPERADMIN,
+        }
+    ),
 
-    # Activar/desactivar CMD
-    "manage_commands": {
-        Role.SUPERADMIN,
-    },
+    # Crear/asignar créditos administrativos.
+    #
+    # SELLER queda expresamente fuera.
+    "grant_credits": frozenset(
+        {
+            Role.ADMIN,
+            Role.COFOUNDER,
+            Role.FOUNDER,
+            Role.OWNER,
+            Role.SUPERADMIN,
+        }
+    ),
 
-    # Configurar API maestra
-    "manage_provider_api": {
-        Role.SUPERADMIN,
-    },
 
-    # Crear/eliminar socios
-    "manage_partners": {
-        Role.SUPERADMIN,
-    },
+    # -----------------------------------------------------
+    # SELLERS
+    # -----------------------------------------------------
 
-    # Crear/eliminar bots
-    "manage_bots": {
-        Role.SUPERADMIN,
-    },
+    "manage_sellers": MANAGEMENT_ROLES,
 
-    # Ver estadísticas globales
-    "view_global_statistics": {
-        Role.SUPERADMIN,
-    },
 
-    # Ver auditoría global
-    "view_global_audit": {
-        Role.SUPERADMIN,
-    },
+    # -----------------------------------------------------
+    # SUSCRIPCIONES
+    # -----------------------------------------------------
+
+    "manage_subscriptions": frozenset(
+        {
+            Role.ADMIN,
+            Role.COFOUNDER,
+            Role.FOUNDER,
+            Role.OWNER,
+            Role.SUPERADMIN,
+        }
+    ),
+
+
+    # -----------------------------------------------------
+    # MODERACIÓN
+    # -----------------------------------------------------
+
+    "manage_bans": STAFF_ROLES,
+
+    "send_announcements": STAFF_ROLES,
+
+    "view_statistics": STAFF_ROLES,
+
+    "view_staff": STAFF_ROLES,
+
+
+    # -----------------------------------------------------
+    # BOT PROPIO
+    # -----------------------------------------------------
+
+    "toggle_own_bot": frozenset(
+        {
+            Role.OWNER,
+            Role.SUPERADMIN,
+        }
+    ),
+
+    "manage_founders": frozenset(
+        {
+            Role.OWNER,
+            Role.SUPERADMIN,
+        }
+    ),
+
+    "manage_group_channel": frozenset(
+        {
+            Role.OWNER,
+            Role.SUPERADMIN,
+        }
+    ),
+
+
+    # -----------------------------------------------------
+    # SOLO SUPERADMIN
+    # -----------------------------------------------------
+
+    "manage_version": frozenset(
+        {
+            Role.SUPERADMIN,
+        }
+    ),
+
+    "manage_commands": frozenset(
+        {
+            Role.SUPERADMIN,
+        }
+    ),
+
+    "manage_provider_api": frozenset(
+        {
+            Role.SUPERADMIN,
+        }
+    ),
+
+    "manage_partners": frozenset(
+        {
+            Role.SUPERADMIN,
+        }
+    ),
+
+    "manage_bots": frozenset(
+        {
+            Role.SUPERADMIN,
+        }
+    ),
+
+    "view_global_statistics": frozenset(
+        {
+            Role.SUPERADMIN,
+        }
+    ),
+
+    "view_global_audit": frozenset(
+        {
+            Role.SUPERADMIN,
+        }
+    ),
 }
 
 
 # =========================================================
-# FUNCIONES DE PERMISOS
+# NORMALIZAR ROL
 # =========================================================
 
-def normalize_role(role: str | Role) -> Role:
+def normalize_role(
+    role: str | Role,
+) -> Role:
     """
-    Convierte texto a Role.
-
-    Ejemplos:
-    OWNER
-    owner
-    FUNDADOR
-    COFUNDADOR
-    SELLER
+    Convierte distintos nombres a un Role oficial.
     """
 
     if isinstance(role, Role):
         return role
 
-    value = str(role).strip().upper()
+    value = (
+        str(role)
+        .strip()
+        .upper()
+    )
 
-    aliases = {
+    aliases: dict[str, Role] = {
+        "SUPERADMIN": Role.SUPERADMIN,
+        "SUPER_ADMIN": Role.SUPERADMIN,
+
+        "OWNER": Role.OWNER,
+        "DUEÑO": Role.OWNER,
+        "DUENO": Role.OWNER,
+
         "FOUNDER": Role.FOUNDER,
         "FUNDADOR": Role.FOUNDER,
+
         "COFOUNDER": Role.COFOUNDER,
+        "CO_FOUNDER": Role.COFOUNDER,
         "COFUNDADOR": Role.COFOUNDER,
-        "SUPER_ADMIN": Role.SUPERADMIN,
-        "SUPERADMIN": Role.SUPERADMIN,
+
+        "ADMIN": Role.ADMIN,
+        "ADMINISTRADOR": Role.ADMIN,
+
+        "SELLER": Role.SELLER,
+        "VENDEDOR": Role.SELLER,
+
+        "USER": Role.USER,
+        "USUARIO": Role.USER,
     }
 
     if value in aliases:
@@ -233,34 +297,57 @@ def normalize_role(role: str | Role) -> Role:
     return Role(value)
 
 
+# =========================================================
+# PERMISO GENERAL
+# =========================================================
+
 def has_permission(
     role: str | Role,
     permission: str,
 ) -> bool:
-    """
-    Indica si un rol posee un permiso.
-    """
 
     try:
-        normalized_role = normalize_role(role)
+        normalized_role = (
+            normalize_role(role)
+        )
+
     except ValueError:
         return False
 
-    allowed_roles = PERMISSIONS.get(permission)
+    permission_name = (
+        str(permission)
+        .strip()
+        .lower()
+    )
 
-    if not allowed_roles:
+    allowed_roles = (
+        PERMISSIONS.get(
+            permission_name
+        )
+    )
+
+    if allowed_roles is None:
         return False
 
-    return normalized_role in allowed_roles
+    return (
+        normalized_role
+        in allowed_roles
+    )
 
 
-def role_level(role: str | Role) -> int:
-    """
-    Devuelve el nivel jerárquico del rol.
-    """
+# =========================================================
+# NIVEL DE ROL
+# =========================================================
+
+def role_level(
+    role: str | Role,
+) -> int:
 
     try:
-        normalized_role = normalize_role(role)
+        normalized_role = (
+            normalize_role(role)
+        )
+
     except ValueError:
         return 0
 
@@ -270,41 +357,110 @@ def role_level(role: str | Role) -> int:
     )
 
 
+# =========================================================
+# ADMINISTRAR OTRO ROL
+# =========================================================
+
 def can_manage_role(
     executor_role: str | Role,
     target_role: str | Role,
 ) -> bool:
     """
-    Evita que un rol inferior administre
-    a uno igual o superior.
+    Un rol no puede administrar a otro
+    de igual o mayor jerarquía.
 
     SUPERADMIN puede administrar todos.
     """
 
     try:
-        executor = normalize_role(executor_role)
-        target = normalize_role(target_role)
+        executor = normalize_role(
+            executor_role
+        )
+
+        target = normalize_role(
+            target_role
+        )
+
     except ValueError:
         return False
 
     if executor == Role.SUPERADMIN:
         return True
 
-    return role_level(executor) > role_level(target)
+    # Nadie fuera del SUPERADMIN puede
+    # administrar al SUPERADMIN.
+    if target == Role.SUPERADMIN:
+        return False
 
+    return (
+        role_level(executor)
+        > role_level(target)
+    )
+
+
+# =========================================================
+# HELPERS DE CRÉDITOS
+# =========================================================
 
 def can_use_cred(
     role: str | Role,
 ) -> bool:
+
     return has_permission(
         role,
         "use_cred",
     )
 
 
+def can_transfer_credits(
+    role: str | Role,
+) -> bool:
+
+    return has_permission(
+        role,
+        "transfer_credits",
+    )
+
+
+def can_grant_credits(
+    role: str | Role,
+) -> bool:
+    """
+    SELLER siempre devuelve False.
+
+    Esto deberá ser usado por el servicio de
+    créditos para impedir que un SELLER genere
+    saldo desde cero.
+    """
+
+    return has_permission(
+        role,
+        "grant_credits",
+    )
+
+
+def seller_transfer_only(
+    role: str | Role,
+) -> bool:
+
+    try:
+        return (
+            normalize_role(role)
+            == Role.SELLER
+        )
+
+    except ValueError:
+        return False
+
+
+# =========================================================
+# HELPERS DE ADMINISTRACIÓN
+# =========================================================
+
 def can_manage_sellers(
     role: str | Role,
 ) -> bool:
+
     return has_permission(
         role,
         "manage_sellers",
@@ -314,6 +470,7 @@ def can_manage_sellers(
 def can_use_sub(
     role: str | Role,
 ) -> bool:
+
     return has_permission(
         role,
         "manage_subscriptions",
@@ -323,7 +480,102 @@ def can_use_sub(
 def can_view_statistics(
     role: str | Role,
 ) -> bool:
+
     return has_permission(
         role,
         "view_statistics",
     )
+
+
+def can_send_announcements(
+    role: str | Role,
+) -> bool:
+
+    return has_permission(
+        role,
+        "send_announcements",
+    )
+
+
+def can_manage_bans(
+    role: str | Role,
+) -> bool:
+
+    return has_permission(
+        role,
+        "manage_bans",
+    )
+
+
+def can_manage_commands(
+    role: str | Role,
+) -> bool:
+
+    return has_permission(
+        role,
+        "manage_commands",
+    )
+
+
+# =========================================================
+# STAFF
+# =========================================================
+
+def is_staff(
+    role: str | Role,
+) -> bool:
+
+    try:
+        normalized = normalize_role(
+            role
+        )
+
+    except ValueError:
+        return False
+
+    return normalized in STAFF_ROLES
+
+
+# =========================================================
+# CMD + VERSIÓN
+# =========================================================
+
+def can_use_command_for_version(
+    role: str | Role,
+    *,
+    version: str,
+    command: str,
+) -> bool:
+    """
+    Comprueba dos capas:
+
+    1. El rol puede realizar consultas.
+    2. La versión V1-V5 tiene habilitado el CMD.
+
+    La comprobación final contra PostgreSQL y
+    overrides del bot se realiza después.
+    """
+
+    if not has_permission(
+        role,
+        "use_queries",
+    ):
+        return False
+
+    try:
+        # Import local para evitar dependencias
+        # circulares durante el inicio.
+        from app.bots.catalog import (
+            version_has_command,
+        )
+
+        return version_has_command(
+            version,
+            command,
+        )
+
+    except (
+        ImportError,
+        ValueError,
+    ):
+        return False
