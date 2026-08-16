@@ -1,13 +1,19 @@
 from __future__ import annotations
 
 from datetime import datetime, timedelta, timezone
+from math import ceil
 
 from sqlalchemy import select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.bots.permissions import can_use_sub
 from app.models.plan import SubscriptionModel
 from app.models.user import UserModel
 
+
+# =========================================================
+# ERRORES
+# =========================================================
 
 class SubscriptionError(Exception):
     """Error general del sistema de suscripciones."""
@@ -25,17 +31,30 @@ class InvalidPlanError(SubscriptionError):
     """El nombre del plan no es válido."""
 
 
+class SubscriptionPermissionError(SubscriptionError):
+    """El rol no puede administrar suscripciones."""
+
+
+class SubscriptionAccountDisabledError(SubscriptionError):
+    """La cuenta destino no está operativa."""
+
+
+# =========================================================
+# SERVICIO
+# =========================================================
+
 class SubscriptionService:
     """
     Motor de suscripciones de GUARDIAHEXBOT.
 
-    /sub administra únicamente:
-    - plan;
-    - días;
-    - fecha de vencimiento.
+    /sub administra exclusivamente:
 
-    Los créditos permanecen totalmente separados
-    y son administrados por /cred.
+    - nombre del plan;
+    - días;
+    - vencimiento.
+
+    Los créditos son independientes y nunca
+    se reinician, crean o eliminan desde aquí.
     """
 
     # =====================================================
@@ -43,8 +62,15 @@ class SubscriptionService:
     # =====================================================
 
     @staticmethod
-    def _validate_days(days: int) -> None:
-        if not isinstance(days, int):
+    def _validate_days(
+        days: int,
+    ) -> None:
+
+        # bool es subclase de int en Python.
+        if (
+            not isinstance(days, int)
+            or isinstance(days, bool)
+        ):
             raise InvalidSubscriptionDaysError(
                 "Los días deben ser un número entero."
             )
@@ -54,14 +80,24 @@ class SubscriptionService:
                 "Los días deben ser mayores que cero."
             )
 
+        # Máximo 10 años por una sola operación.
         if days > 3650:
             raise InvalidSubscriptionDaysError(
-                "La cantidad de días excede el límite permitido."
+                "La cantidad de días excede "
+                "el límite permitido."
             )
 
+
     @staticmethod
-    def _normalize_plan(plan: str) -> str:
-        value = str(plan).strip().upper()
+    def _normalize_plan(
+        plan: str,
+    ) -> str:
+
+        value = (
+            str(plan)
+            .strip()
+            .upper()
+        )
 
         if not value:
             raise InvalidPlanError(
@@ -73,10 +109,59 @@ class SubscriptionService:
                 "Nombre de plan inválido."
             )
 
+        # FREE representa ausencia de suscripción,
+        # por lo que nunca se asigna mediante /sub.
+        if value == "FREE":
+            raise InvalidPlanError(
+                "FREE no es un plan por días."
+            )
+
         return value
 
+
+    @staticmethod
+    def _validate_manager_role(
+        role: str | None,
+    ) -> str:
+
+        value = (
+            str(role or "")
+            .strip()
+            .upper()
+        )
+
+        if not can_use_sub(value):
+            raise SubscriptionPermissionError(
+                "Tu rol no puede administrar "
+                "suscripciones."
+            )
+
+        return value
+
+
+    @staticmethod
+    def _validate_account(
+        user: UserModel,
+    ) -> None:
+
+        if not user.is_registered:
+            raise SubscriptionAccountDisabledError(
+                "El usuario no está registrado."
+            )
+
+        if not user.is_active:
+            raise SubscriptionAccountDisabledError(
+                "La cuenta del usuario está inactiva."
+            )
+
+        if user.is_banned:
+            raise SubscriptionAccountDisabledError(
+                "La cuenta del usuario está bloqueada."
+            )
+
+
     # =====================================================
-    # BUSCAR USUARIO
+    # BUSCAR USUARIO CON LOCK
     # =====================================================
 
     async def _get_user_for_update(
@@ -86,30 +171,31 @@ class SubscriptionService:
         bot_id: int,
         telegram_id: int,
     ) -> UserModel:
-        """
-        Obtiene y bloquea temporalmente la fila
-        del usuario durante la modificación.
-        """
 
-        statement = (
-            select(UserModel)
+        result = await session.execute(
+            select(
+                UserModel
+            )
             .where(
                 UserModel.bot_id == bot_id,
-                UserModel.telegram_id == telegram_id,
+                UserModel.telegram_id
+                == telegram_id,
             )
             .with_for_update()
         )
 
-        result = await session.execute(statement)
-
-        user = result.scalar_one_or_none()
+        user = (
+            result.scalar_one_or_none()
+        )
 
         if user is None:
             raise SubscriptionUserNotFoundError(
-                "Usuario no encontrado dentro de este bot."
+                "Usuario no encontrado "
+                "dentro de este bot."
             )
 
         return user
+
 
     # =====================================================
     # /sub ID DIAS PLAN
@@ -127,66 +213,100 @@ class SubscriptionService:
         activated_by_role: str | None,
     ) -> SubscriptionModel:
         """
-        Añade días a la suscripción.
+        Añade días sin eliminar los días restantes.
 
         Ejemplo:
 
         /sub 123456789 30 PREMIUM
 
-        Si el usuario aún tiene días:
-            añade los nuevos días al vencimiento actual.
+        Si vence dentro de 10 días:
+            nuevo vencimiento = 40 días.
 
         Si ya venció:
-            comienza desde el momento actual.
+            comienza desde ahora.
+
+        Los créditos del usuario no se modifican.
         """
 
-        self._validate_days(days)
+        self._validate_days(
+            days
+        )
 
-        normalized_plan = self._normalize_plan(
-            plan
+        normalized_plan = (
+            self._normalize_plan(
+                plan
+            )
+        )
+
+        manager_role = (
+            self._validate_manager_role(
+                activated_by_role
+            )
         )
 
         try:
-            user = await self._get_user_for_update(
-                session,
-                bot_id=bot_id,
-                telegram_id=target_telegram_id,
+            user = (
+                await self._get_user_for_update(
+                    session,
+                    bot_id=bot_id,
+                    telegram_id=(
+                        target_telegram_id
+                    ),
+                )
             )
 
-            now = datetime.now(timezone.utc)
+            self._validate_account(
+                user
+            )
+
+            now = datetime.now(
+                timezone.utc
+            )
 
             current_expiration = (
                 user.plan_expires_at
             )
 
-            # Si existe una suscripción todavía vigente,
-            # sumamos los días desde su vencimiento.
+            # =================================================
+            # CONSERVAR DÍAS RESTANTES
+            # =================================================
+
             if (
                 current_expiration is not None
                 and current_expiration > now
             ):
-                starts_at = now
-                new_expiration = (
+                base_expiration = (
                     current_expiration
-                    + timedelta(days=days)
                 )
 
             else:
-                starts_at = now
-                new_expiration = (
-                    now
-                    + timedelta(days=days)
-                )
+                base_expiration = now
 
-            # Desactivamos el registro anterior activo
-            # para mantener un único estado actual.
+            new_expiration = (
+                base_expiration
+                + timedelta(
+                    days=days
+                )
+            )
+
+            # El nuevo plan entra en vigor inmediatamente.
+            starts_at = now
+
+            # =================================================
+            # DEJAR UN SOLO REGISTRO ACTIVO
+            # =================================================
+
             await session.execute(
-                update(SubscriptionModel)
+                update(
+                    SubscriptionModel
+                )
                 .where(
                     SubscriptionModel.bot_id
                     == bot_id,
+
                     SubscriptionModel.user_id
                     == user.id,
+
                     SubscriptionModel.is_active
                     .is_(True),
                 )
@@ -194,6 +314,10 @@ class SubscriptionService:
                     is_active=False
                 )
             )
+
+            # =================================================
+            # ACTUALIZAR ESTADO ACTUAL DEL USUARIO
+            # =================================================
 
             user.current_plan = (
                 normalized_plan
@@ -203,27 +327,47 @@ class SubscriptionService:
                 new_expiration
             )
 
-            subscription = SubscriptionModel(
-                bot_id=bot_id,
-                user_id=user.id,
-                plan_name=normalized_plan,
-                days_added=days,
-                starts_at=starts_at,
-                expires_at=new_expiration,
-                activated_by_telegram_id=(
-                    activated_by_telegram_id
-                ),
-                activated_by_role=(
-                    activated_by_role.upper()
-                    if activated_by_role
-                    else None
-                ),
-                is_active=True,
+            # OJO:
+            # user.credits NO se modifica.
+
+            subscription = (
+                SubscriptionModel(
+                    bot_id=bot_id,
+
+                    user_id=user.id,
+
+                    plan_name=(
+                        normalized_plan
+                    ),
+
+                    days_added=days,
+
+                    starts_at=(
+                        starts_at
+                    ),
+
+                    expires_at=(
+                        new_expiration
+                    ),
+
+                    activated_by_telegram_id=(
+                        activated_by_telegram_id
+                    ),
+
+                    activated_by_role=(
+                        manager_role
+                    ),
+
+                    is_active=True,
+                )
             )
 
-            session.add(subscription)
+            session.add(
+                subscription
+            )
 
             await session.commit()
+
             await session.refresh(
                 subscription
             )
@@ -233,6 +377,7 @@ class SubscriptionService:
         except Exception:
             await session.rollback()
             raise
+
 
     # =====================================================
     # CONSULTAR ESTADO
@@ -245,60 +390,97 @@ class SubscriptionService:
         bot_id: int,
         telegram_id: int,
     ) -> dict:
-        statement = select(
-            UserModel
-        ).where(
-            UserModel.bot_id == bot_id,
-            UserModel.telegram_id == telegram_id,
-        )
 
         result = await session.execute(
-            statement
+            select(
+                UserModel
+            )
+            .where(
+                UserModel.bot_id == bot_id,
+                UserModel.telegram_id
+                == telegram_id,
+            )
         )
 
-        user = result.scalar_one_or_none()
+        user = (
+            result.scalar_one_or_none()
+        )
 
         if user is None:
             raise SubscriptionUserNotFoundError(
                 "Usuario no encontrado."
             )
 
-        now = datetime.now(timezone.utc)
+        now = datetime.now(
+            timezone.utc
+        )
 
-        expires_at = user.plan_expires_at
+        expires_at = (
+            user.plan_expires_at
+        )
 
         active = bool(
-            user.current_plan.upper() != "FREE"
+            user.is_registered
+            and user.is_active
+            and not user.is_banned
+            and user.current_plan.upper()
+            != "FREE"
             and expires_at is not None
             and expires_at > now
         )
 
         remaining_days = 0
 
-        if active and expires_at:
+        if (
+            active
+            and expires_at is not None
+        ):
             remaining_seconds = (
                 expires_at - now
             ).total_seconds()
 
             remaining_days = max(
                 1,
-                int(
-                    (
-                        remaining_seconds
-                        + 86399
-                    )
-                    // 86400
+                ceil(
+                    remaining_seconds
+                    / 86400
                 ),
             )
 
         return {
             "bot_id": bot_id,
-            "telegram_id": telegram_id,
-            "plan": user.current_plan,
+
+            "telegram_id": (
+                telegram_id
+            ),
+
+            "plan": (
+                user.current_plan
+            ),
+
             "active": active,
-            "expires_at": expires_at,
-            "remaining_days": remaining_days,
+
+            "expires_at": (
+                expires_at
+            ),
+
+            "remaining_days": (
+                remaining_days
+            ),
+
+            "credits": (
+                user.credits
+            ),
+
+            "is_banned": (
+                user.is_banned
+            ),
+
+            "is_active": (
+                user.is_active
+            ),
         }
+
 
     # =====================================================
     # CANCELAR SUSCRIPCIÓN
@@ -310,32 +492,46 @@ class SubscriptionService:
         *,
         bot_id: int,
         target_telegram_id: int,
+        cancelled_by_role: str,
     ) -> UserModel:
         """
-        Cancela el plan por días.
+        Cancela únicamente el plan por días.
 
-        IMPORTANTE:
-        No elimina ni modifica los créditos
-        existentes del usuario.
+        Los créditos permanecen intactos.
         """
 
+        self._validate_manager_role(
+            cancelled_by_role
+        )
+
         try:
-            user = await self._get_user_for_update(
-                session,
-                bot_id=bot_id,
-                telegram_id=target_telegram_id,
+            user = (
+                await self._get_user_for_update(
+                    session,
+                    bot_id=bot_id,
+                    telegram_id=(
+                        target_telegram_id
+                    ),
+                )
             )
 
             user.current_plan = "FREE"
             user.plan_expires_at = None
 
+            # OJO:
+            # user.credits permanece intacto.
+
             await session.execute(
-                update(SubscriptionModel)
+                update(
+                    SubscriptionModel
+                )
                 .where(
                     SubscriptionModel.bot_id
                     == bot_id,
+
                     SubscriptionModel.user_id
                     == user.id,
+
                     SubscriptionModel.is_active
                     .is_(True),
                 )
@@ -345,13 +541,17 @@ class SubscriptionService:
             )
 
             await session.commit()
-            await session.refresh(user)
+
+            await session.refresh(
+                user
+            )
 
             return user
 
         except Exception:
             await session.rollback()
             raise
+
 
     # =====================================================
     # LIMPIAR PLANES VENCIDOS
@@ -360,26 +560,54 @@ class SubscriptionService:
     async def expire_outdated_subscriptions(
         self,
         session: AsyncSession,
+        *,
+        bot_id: int | None = None,
     ) -> int:
         """
-        Marca como vencidas las suscripciones cuyo
-        tiempo ya terminó.
+        Limpieza periódica.
 
-        Puede ejecutarse periódicamente desde
-        una tarea interna.
+        Usa bloqueo de filas para evitar que una
+        renovación simultánea sea sobrescrita por
+        el proceso de expiración.
         """
 
-        now = datetime.now(timezone.utc)
+        now = datetime.now(
+            timezone.utc
+        )
 
-        result = await session.execute(
-            select(UserModel).where(
+        statement = (
+            select(
+                UserModel
+            )
+            .where(
                 UserModel.plan_expires_at
                 .is_not(None),
+
                 UserModel.plan_expires_at
                 <= now,
+
                 UserModel.current_plan
                 != "FREE",
             )
+        )
+
+        if bot_id is not None:
+            statement = (
+                statement.where(
+                    UserModel.bot_id
+                    == bot_id
+                )
+            )
+
+        statement = (
+            statement
+            .with_for_update(
+                skip_locked=True
+            )
+        )
+
+        result = await session.execute(
+            statement
         )
 
         users = list(
@@ -393,15 +621,36 @@ class SubscriptionService:
             user_ids: list[int] = []
 
             for user in users:
+                # Volvemos a comprobar después
+                # de adquirir el bloqueo.
+                if (
+                    user.plan_expires_at
+                    is None
+                    or user.plan_expires_at
+                    > now
+                ):
+                    continue
+
                 user.current_plan = "FREE"
                 user.plan_expires_at = None
-                user_ids.append(user.id)
+
+                user_ids.append(
+                    user.id
+                )
+
+            if not user_ids:
+                return 0
 
             await session.execute(
-                update(SubscriptionModel)
+                update(
+                    SubscriptionModel
+                )
                 .where(
                     SubscriptionModel.user_id
-                    .in_(user_ids),
+                    .in_(
+                        user_ids
+                    ),
+
                     SubscriptionModel.is_active
                     .is_(True),
                 )
@@ -412,11 +661,15 @@ class SubscriptionService:
 
             await session.commit()
 
-            return len(users)
+            return len(
+                user_ids
+            )
 
         except Exception:
             await session.rollback()
             raise
 
 
-subscription_service = SubscriptionService()
+subscription_service = (
+    SubscriptionService()
+)
