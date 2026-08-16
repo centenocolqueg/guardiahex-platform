@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 from html import escape
 from typing import Any
 
@@ -6,36 +8,91 @@ from typing import Any
 # UTILIDADES
 # =========================================================
 
-def safe(value: Any) -> str:
+def safe(
+    value: Any,
+) -> str:
     """
-    Escapa texto para evitar romper el formato HTML
-    utilizado por Telegram.
+    Escapa cualquier contenido antes de enviarlo
+    con parse_mode HTML a Telegram.
     """
+
     if value is None:
         return ""
 
-    return escape(str(value))
+    return escape(
+        str(value),
+        quote=True,
+    )
 
 
 def normalize_bot_name(
     bot_name: str | None,
 ) -> str:
     """
-    Devuelve un nombre limpio para encabezados.
+    Normaliza el nombre mostrado en respuestas.
     """
-    value = (bot_name or "GUARDIAHEXBOT").strip()
+
+    value = (
+        bot_name
+        or "GUARDIAHEXBOT"
+    )
+
+    value = (
+        str(value)
+        .strip()
+    )
 
     if value.startswith("@"):
         value = value[1:]
 
-    return value or "GUARDIAHEXBOT"
+    return (
+        value
+        or "GUARDIAHEXBOT"
+    )
 
 
-def format_credits(amount: int) -> str:
+def normalize_username(
+    username: str | None,
+) -> str:
+    if not username:
+        return "Sin username"
+
+    value = (
+        str(username)
+        .strip()
+        .lstrip("@")
+    )
+
+    if not value:
+        return "Sin username"
+
+    return f"@{value}"
+
+
+def format_credits(
+    amount: int | float,
+) -> str:
     """
-    Formatea cantidades de créditos.
+    Formato visual para créditos.
+
+    1000 -> 1.000
     """
-    return f"{int(amount):,}".replace(",", ".")
+
+    try:
+        number = int(
+            amount
+        )
+
+    except (
+        TypeError,
+        ValueError,
+    ):
+        number = 0
+
+    return (
+        f"{number:,}"
+        .replace(",", ".")
+    )
 
 
 def format_currency(
@@ -44,7 +101,19 @@ def format_currency(
     """
     Formato monetario peruano.
     """
-    return f"S/ {float(amount):,.2f}"
+
+    try:
+        value = float(
+            amount
+        )
+
+    except (
+        TypeError,
+        ValueError,
+    ):
+        value = 0.0
+
+    return f"S/ {value:,.2f}"
 
 
 def separator() -> str:
@@ -52,7 +121,7 @@ def separator() -> str:
 
 
 # =========================================================
-# ENCABEZADOS
+# ENCABEZADO
 # =========================================================
 
 def format_bot_header(
@@ -60,12 +129,15 @@ def format_bot_header(
     title: str,
     icon: str = "🔎",
 ) -> str:
+
     name = safe(
-        normalize_bot_name(bot_name)
+        normalize_bot_name(
+            bot_name
+        )
     )
 
     return (
-        f"[#<b>{name}</b> {icon}] ➾ "
+        f"[#<b>{name}</b> {safe(icon)}] ➾ "
         f"<b>{safe(title)}</b>"
     )
 
@@ -75,9 +147,50 @@ def format_bot_header(
 # =========================================================
 
 def format_access_denied() -> str:
-    return (
-        "[✖️] ¿Qué chucha quieres? "
-        "No tienes permiso para hacer esto."
+    return "\n".join(
+        [
+            "⛔ <b>ACCESO DENEGADO</b>",
+            "",
+            (
+                "No tienes permisos para "
+                "realizar esta operación."
+            ),
+        ]
+    )
+
+
+# =========================================================
+# CUENTA NO REGISTRADA
+# =========================================================
+
+def format_account_required() -> str:
+    return "\n".join(
+        [
+            "👤 <b>CUENTA NO REGISTRADA</b>",
+            "",
+            (
+                "Utiliza /register para "
+                "crear tu cuenta."
+            ),
+        ]
+    )
+
+
+# =========================================================
+# CUENTA BLOQUEADA
+# =========================================================
+
+def format_account_blocked() -> str:
+    return "\n".join(
+        [
+            "⛔ <b>CUENTA BLOQUEADA</b>",
+            "",
+            (
+                "Tu cuenta no se encuentra "
+                "habilitada para realizar "
+                "esta operación."
+            ),
+        ]
     )
 
 
@@ -96,10 +209,11 @@ def format_profile(
     status: str = "ACTIVO",
     expires_at: str | None = None,
 ) -> str:
+
     username_text = (
-        f"@{username.lstrip('@')}"
-        if username
-        else "Sin username"
+        normalize_username(
+            username
+        )
     )
 
     lines = [
@@ -111,20 +225,36 @@ def format_profile(
         "",
         separator(),
         "",
-        f"USUARIO ➾ <b>{safe(username_text)}</b>",
-        f"ID ➾ <code>{telegram_id}</code>",
-        f"ROL ➾ <b>{safe(role)}</b>",
-        f"PLAN ➾ <b>{safe(plan)}</b>",
+        (
+            "USUARIO ➾ "
+            f"<b>{safe(username_text)}</b>"
+        ),
+        (
+            "ID ➾ "
+            f"<code>{int(telegram_id)}</code>"
+        ),
+        (
+            "ROL ➾ "
+            f"<b>{safe(role)}</b>"
+        ),
+        (
+            "PLAN ➾ "
+            f"<b>{safe(plan)}</b>"
+        ),
         (
             "CRÉDITOS ➾ "
             f"<b>{format_credits(credits)}</b>"
         ),
-        f"ESTADO ➾ <b>{safe(status)}</b> ✅",
+        (
+            "ESTADO ➾ "
+            f"<b>{safe(status)}</b>"
+        ),
     ]
 
     if expires_at:
         lines.append(
-            f"VENCE ➾ <b>{safe(expires_at)}</b>"
+            "VENCE ➾ "
+            f"<b>{safe(expires_at)}</b>"
         )
 
     lines.extend(
@@ -134,11 +264,13 @@ def format_profile(
         ]
     )
 
-    return "\n".join(lines)
+    return "\n".join(
+        lines
+    )
 
 
 # =========================================================
-# RESULTADO DE CONSULTA AUTORIZADA
+# RESULTADO DE CONSULTA
 # =========================================================
 
 def format_query_result(
@@ -153,16 +285,16 @@ def format_query_result(
     telegram_id: int,
 ) -> str:
     """
-    Formato estándar para resultados textuales.
+    Resumen textual estándar.
 
-    Los archivos, imágenes o PDFs se enviarán
-    por separado antes de este resumen.
+    Si existe PDF/archivo, debe enviarse primero
+    y este mensaje después.
     """
 
     username_text = (
-        f"@{username.lstrip('@')}"
-        if username
-        else "Sin username"
+        normalize_username(
+            username
+        )
     )
 
     return "\n".join(
@@ -172,8 +304,14 @@ def format_query_result(
                 service,
             ),
             "",
-            f"NIVEL ➾ <b>{safe(level)}</b>",
-            "ESTADO ➾ OPERATIVO ✅",
+            (
+                "NIVEL ➾ "
+                f"<b>{safe(level)}</b>"
+            ),
+            (
+                "ESTADO ➾ "
+                "<b>COMPLETADO ✅</b>"
+            ),
             "",
             separator(),
             "",
@@ -188,20 +326,26 @@ def format_query_result(
             (
                 "COSTO ➾ "
                 f"<b>{format_credits(cost)} "
-                f"{'Crédito' if cost == 1 else 'Créditos'}</b>"
+                f"{'Crédito' if int(cost) == 1 else 'Créditos'}</b>"
             ),
             (
                 "CRÉDITOS RESTANTES ➾ "
                 f"<b>{format_credits(remaining_credits)}</b>"
             ),
-            f"USUARIO ➾ <b>{safe(username_text)}</b>",
-            f"ID ➾ <code>{telegram_id}</code>",
+            (
+                "USUARIO ➾ "
+                f"<b>{safe(username_text)}</b>"
+            ),
+            (
+                "ID ➾ "
+                f"<code>{int(telegram_id)}</code>"
+            ),
         ]
     )
 
 
 # =========================================================
-# CONSULTA SIN RESULTADOS
+# SIN RESULTADOS
 # =========================================================
 
 def format_no_results(
@@ -214,17 +358,20 @@ def format_no_results(
     telegram_id: int,
 ) -> str:
     """
-    Se utiliza cuando una consulta válida llegó
-    al servicio pero no encontró información.
+    Se usa únicamente cuando:
 
-    La política comercial puede descontar el
-    crédito aunque el resultado esté vacío.
+    - el formato de entrada fue válido;
+    - la consulta realmente llegó al proveedor;
+    - el proveedor respondió correctamente;
+    - pero no encontró información.
+
+    Esta operación puede consumir créditos.
     """
 
     username_text = (
-        f"@{username.lstrip('@')}"
-        if username
-        else "Sin username"
+        normalize_username(
+            username
+        )
     )
 
     return "\n".join(
@@ -237,8 +384,8 @@ def format_no_results(
             "⚠️ <b>SIN RESULTADOS</b>",
             "",
             (
-                "Verifique los datos e intente "
-                "nuevamente."
+                "Sin Resultados. Verifique los datos "
+                "e intente nuevamente."
             ),
             "",
             separator(),
@@ -248,14 +395,20 @@ def format_no_results(
             (
                 "COSTO ➾ "
                 f"<b>{format_credits(cost)} "
-                f"{'Crédito' if cost == 1 else 'Créditos'}</b>"
+                f"{'Crédito' if int(cost) == 1 else 'Créditos'}</b>"
             ),
             (
                 "CRÉDITOS RESTANTES ➾ "
                 f"<b>{format_credits(remaining_credits)}</b>"
             ),
-            f"USUARIO ➾ <b>{safe(username_text)}</b>",
-            f"ID ➾ <code>{telegram_id}</code>",
+            (
+                "USUARIO ➾ "
+                f"<b>{safe(username_text)}</b>"
+            ),
+            (
+                "ID ➾ "
+                f"<code>{int(telegram_id)}</code>"
+            ),
         ]
     )
 
@@ -270,9 +423,9 @@ def format_invalid_input(
     example: str,
 ) -> str:
     """
-    Se usa antes de ejecutar una consulta.
-    Al no haberse realizado la petición,
-    no debe descontarse crédito.
+    Entrada inválida antes de llamar al proveedor.
+
+    Nunca debe descontar créditos.
     """
 
     return "\n".join(
@@ -284,16 +437,52 @@ def format_invalid_input(
                 f"<code>{safe(command)}</code>"
             ),
             "",
-            "UTILIZA:",
-            f"<code>{safe(example)}</code>",
+            "<b>UTILIZA:</b>",
+            (
+                f"<code>{safe(example)}</code>"
+            ),
             "",
-            "No se realizó ningún descuento.",
+            (
+                "💳 No se realizó "
+                "ningún descuento."
+            ),
         ]
     )
 
 
 # =========================================================
-# CRÉDITOS /cred
+# CRÉDITOS INSUFICIENTES
+# =========================================================
+
+def format_insufficient_credits(
+    *,
+    required: int,
+    available: int,
+) -> str:
+
+    return "\n".join(
+        [
+            "💳 <b>CRÉDITOS INSUFICIENTES</b>",
+            "",
+            (
+                "COSTO ➾ "
+                f"<b>{format_credits(required)}</b>"
+            ),
+            (
+                "SALDO ➾ "
+                f"<b>{format_credits(available)}</b>"
+            ),
+            "",
+            (
+                "Utiliza /buy para consultar "
+                "las opciones disponibles."
+            ),
+        ]
+    )
+
+
+# =========================================================
+# TRANSACCIÓN /cred
 # =========================================================
 
 def format_credit_transaction(
@@ -308,16 +497,17 @@ def format_credit_transaction(
     executor_id: int,
     executor_role: str,
 ) -> str:
+
     target_text = (
-        f"@{target_username.lstrip('@')}"
-        if target_username
-        else "Sin username"
+        normalize_username(
+            target_username
+        )
     )
 
     executor_text = (
-        f"@{executor_username.lstrip('@')}"
-        if executor_username
-        else "Sin username"
+        normalize_username(
+            executor_username
+        )
     )
 
     return "\n".join(
@@ -330,8 +520,14 @@ def format_credit_transaction(
             "",
             separator(),
             "",
-            f"USUARIO ➾ <b>{safe(target_text)}</b>",
-            f"ID ➾ <code>{target_id}</code>",
+            (
+                "USUARIO ➾ "
+                f"<b>{safe(target_text)}</b>"
+            ),
+            (
+                "ID ➾ "
+                f"<code>{int(target_id)}</code>"
+            ),
             (
                 "SALDO ANTERIOR ➾ "
                 f"<b>{format_credits(previous_balance)}</b>"
@@ -349,11 +545,20 @@ def format_credit_transaction(
             "",
             "👤 <b>OPERACIÓN REALIZADA POR</b>",
             "",
-            f"USUARIO ➾ <b>{safe(executor_text)}</b>",
-            f"ID ➾ <code>{executor_id}</code>",
-            f"ROL ➾ <b>{safe(executor_role)}</b>",
+            (
+                "USUARIO ➾ "
+                f"<b>{safe(executor_text)}</b>"
+            ),
+            (
+                "ID ➾ "
+                f"<code>{int(executor_id)}</code>"
+            ),
+            (
+                "ROL ➾ "
+                f"<b>{safe(executor_role)}</b>"
+            ),
             "",
-            "ESTADO ➾ COMPLETADO ✅",
+            "ESTADO ➾ <b>COMPLETADO ✅</b>",
         ]
     )
 
@@ -372,10 +577,11 @@ def format_subscription_update(
     expires_at: str,
     executor_role: str,
 ) -> str:
+
     target_text = (
-        f"@{target_username.lstrip('@')}"
-        if target_username
-        else "Sin username"
+        normalize_username(
+            target_username
+        )
     )
 
     return "\n".join(
@@ -388,14 +594,35 @@ def format_subscription_update(
             "",
             separator(),
             "",
-            f"USUARIO ➾ <b>{safe(target_text)}</b>",
-            f"ID ➾ <code>{target_id}</code>",
-            f"PLAN ➾ <b>{safe(plan)}</b>",
-            f"DÍAS AÑADIDOS ➾ <b>{days_added}</b>",
-            f"VENCE ➾ <b>{safe(expires_at)}</b>",
+            (
+                "USUARIO ➾ "
+                f"<b>{safe(target_text)}</b>"
+            ),
+            (
+                "ID ➾ "
+                f"<code>{int(target_id)}</code>"
+            ),
+            (
+                "PLAN ➾ "
+                f"<b>{safe(plan)}</b>"
+            ),
+            (
+                "DÍAS AÑADIDOS ➾ "
+                f"<b>{int(days_added)}</b>"
+            ),
+            (
+                "VENCE ➾ "
+                f"<b>{safe(expires_at)}</b>"
+            ),
             "",
-            f"OPERADOR ➾ <b>{safe(executor_role)}</b>",
-            "ESTADO ➾ ACTIVADO ✅",
+            (
+                "OPERADOR ➾ "
+                f"<b>{safe(executor_role)}</b>"
+            ),
+            (
+                "ESTADO ➾ "
+                "<b>ACTIVADO ✅</b>"
+            ),
         ]
     )
 
@@ -412,14 +639,21 @@ def format_seller_transfer(
     seller_remaining: int,
     target_balance: int,
 ) -> str:
+
     return "\n".join(
         [
             "👑 <b>TRANSFERENCIA SELLER</b>",
             "",
             separator(),
             "",
-            f"SELLER ID ➾ <code>{seller_id}</code>",
-            f"DESTINO ID ➾ <code>{target_id}</code>",
+            (
+                "SELLER ID ➾ "
+                f"<code>{int(seller_id)}</code>"
+            ),
+            (
+                "DESTINO ID ➾ "
+                f"<code>{int(target_id)}</code>"
+            ),
             (
                 "TRANSFERIDO ➾ "
                 f"<b>{format_credits(amount)} Créditos</b>"
@@ -434,59 +668,89 @@ def format_seller_transfer(
                 f"<b>{format_credits(target_balance)}</b>"
             ),
             "",
-            "ESTADO ➾ COMPLETADO ✅",
+            (
+                "ESTADO ➾ "
+                "<b>COMPLETADO ✅</b>"
+            ),
         ]
     )
 
 
 # =========================================================
-# ERRORES INTERNOS
+# SERVICIO NO DISPONIBLE
 # =========================================================
 
 def format_service_unavailable() -> str:
     """
-    Mensaje público neutral.
-
-    Los detalles técnicos reales se registrarán
-    únicamente en logs privados.
+    Nunca expone detalles internos,
+    URLs, tokens ni errores del proveedor.
     """
+
     return "\n".join(
         [
             "⚠️ <b>SERVICIO TEMPORALMENTE NO DISPONIBLE</b>",
             "",
             (
-                "No fue posible completar la operación "
-                "en este momento."
+                "No fue posible completar "
+                "la operación en este momento."
             ),
             "",
-            "Intente nuevamente más tarde.",
+            (
+                "Intente nuevamente más tarde."
+            ),
         ]
     )
 
 
 # =========================================================
-# HISTORIAL / AUDITORÍA
+# CONSULTA NO DISPONIBLE POR VERSIÓN
+# =========================================================
+
+def format_command_not_available() -> str:
+
+    return "\n".join(
+        [
+            "🔒 <b>CMD NO DISPONIBLE</b>",
+            "",
+            (
+                "Este comando no se encuentra "
+                "habilitado para la versión "
+                "actual del bot."
+            ),
+        ]
+    )
+
+
+# =========================================================
+# AUDITORÍA
 # =========================================================
 
 def mask_argument(
     value: str | None,
 ) -> str:
     """
-    Reduce exposición de información en logs.
+    Minimiza exposición en logs.
 
-    Ejemplo:
     12345678 -> ****5678
     """
+
     if not value:
         return "—"
 
-    text = str(value).strip()
+    text = (
+        str(value)
+        .strip()
+    )
 
     if len(text) <= 4:
-        return "*" * len(text)
+        return (
+            "*" * len(text)
+        )
 
     return (
-        "*" * (len(text) - 4)
+        "*" * (
+            len(text) - 4
+        )
         + text[-4:]
     )
 
@@ -500,28 +764,47 @@ def format_audit_entry(
     target_id: int | None = None,
     argument: str | None = None,
 ) -> str:
+
     lines = [
         "🛡️ <b>HISTORIAL DEL SISTEMA</b>",
         "",
-        f"BOT ➾ <b>{safe(bot_name)}</b>",
-        f"ACCIÓN ➾ <b>{safe(action)}</b>",
-        f"ACTOR ID ➾ <code>{actor_id}</code>",
-        f"ROL ➾ <b>{safe(actor_role)}</b>",
+        (
+            "BOT ➾ "
+            f"<b>{safe(bot_name)}</b>"
+        ),
+        (
+            "ACCIÓN ➾ "
+            f"<b>{safe(action)}</b>"
+        ),
+        (
+            "ACTOR ID ➾ "
+            f"<code>{int(actor_id)}</code>"
+        ),
+        (
+            "ROL ➾ "
+            f"<b>{safe(actor_role)}</b>"
+        ),
     ]
 
     if target_id is not None:
         lines.append(
-            f"DESTINO ID ➾ <code>{target_id}</code>"
+            "DESTINO ID ➾ "
+            f"<code>{int(target_id)}</code>"
         )
 
     if argument:
         lines.append(
             "DATO ➾ "
-            f"<code>{safe(mask_argument(argument))}</code>"
+            f"<code>"
+            f"{safe(mask_argument(argument))}"
+            f"</code>"
         )
 
     lines.append(
-        "ESTADO ➾ REGISTRADO ✅"
+        "ESTADO ➾ "
+        "<b>REGISTRADO ✅</b>"
     )
 
-    return "\n".join(lines)
+    return "\n".join(
+        lines
+    )
