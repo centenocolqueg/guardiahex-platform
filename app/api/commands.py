@@ -9,7 +9,7 @@ from fastapi import (
     status,
 )
 from pydantic import BaseModel, Field
-from sqlalchemy import select
+from sqlalchemy import or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.auth import (
@@ -30,6 +30,19 @@ router = APIRouter(
     prefix="/commands",
     tags=["Comandos"],
 )
+
+
+# =========================================================
+# CONSTANTES
+# =========================================================
+
+ALLOWED_VERSIONS = {
+    "V1",
+    "V2",
+    "V3",
+    "V4",
+    "V5",
+}
 
 
 # =========================================================
@@ -57,7 +70,10 @@ class CommandCreateRequest(BaseModel):
         max_length=160,
     )
 
-    description: str | None = None
+    description: str | None = Field(
+        default=None,
+        max_length=2000,
+    )
 
     level: str = Field(
         default="PROFESIONAL",
@@ -75,16 +91,25 @@ class CommandCreateRequest(BaseModel):
         max_length=30,
     )
 
-    result_description: str | None = None
+    result_description: str | None = Field(
+        default=None,
+        max_length=2000,
+    )
 
-    output_formats: list[str] = []
+    output_formats: list[str] = Field(
+        default_factory=list,
+        max_length=20,
+    )
 
     provider_key: str | None = Field(
         default=None,
         max_length=120,
     )
 
-    available_versions: list[str] = []
+    available_versions: list[str] = Field(
+        default_factory=list,
+        max_length=5,
+    )
 
     enabled_global: bool = True
 
@@ -94,26 +119,36 @@ class CommandCreateRequest(BaseModel):
 
     charge_on_no_results: bool = True
 
-    sort_order: int = 0
+    sort_order: int = Field(
+        default=0,
+        ge=0,
+        le=100000,
+    )
 
 
 class CommandUpdateRequest(BaseModel):
     category: str | None = Field(
         default=None,
+        min_length=2,
         max_length=60,
     )
 
     command: str | None = Field(
         default=None,
+        min_length=2,
         max_length=80,
     )
 
     title: str | None = Field(
         default=None,
+        min_length=2,
         max_length=160,
     )
 
-    description: str | None = None
+    description: str | None = Field(
+        default=None,
+        max_length=2000,
+    )
 
     level: str | None = Field(
         default=None,
@@ -131,16 +166,25 @@ class CommandUpdateRequest(BaseModel):
         max_length=30,
     )
 
-    result_description: str | None = None
+    result_description: str | None = Field(
+        default=None,
+        max_length=2000,
+    )
 
-    output_formats: list[str] | None = None
+    output_formats: list[str] | None = Field(
+        default=None,
+        max_length=20,
+    )
 
     provider_key: str | None = Field(
         default=None,
         max_length=120,
     )
 
-    available_versions: list[str] | None = None
+    available_versions: list[str] | None = Field(
+        default=None,
+        max_length=5,
+    )
 
     enabled_global: bool | None = None
 
@@ -150,7 +194,11 @@ class CommandUpdateRequest(BaseModel):
 
     charge_on_no_results: bool | None = None
 
-    sort_order: int | None = None
+    sort_order: int | None = Field(
+        default=None,
+        ge=0,
+        le=100000,
+    )
 
 
 class BotCommandOverrideRequest(BaseModel):
@@ -172,7 +220,10 @@ class BotCommandOverrideRequest(BaseModel):
         max_length=160,
     )
 
-    result_description_override: str | None = None
+    result_description_override: str | None = Field(
+        default=None,
+        max_length=2000,
+    )
 
 
 class CommandResponse(BaseModel):
@@ -213,6 +264,8 @@ class BotCommandResponse(BaseModel):
     title: str
     category: str
 
+    version_allowed: bool
+
     default_enabled: bool
     effective_enabled: bool
 
@@ -231,16 +284,67 @@ class BotCommandResponse(BaseModel):
 
 
 # =========================================================
-# UTILIDADES
+# NORMALIZADORES
 # =========================================================
 
 def normalize_command(
     value: str,
 ) -> str:
-    command = value.strip().lower()
+    command = (
+        value
+        .strip()
+        .lower()
+    )
 
     if not command.startswith("/"):
         command = f"/{command}"
+
+    raw = command[1:]
+
+    if not raw:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="CMD inválido.",
+        )
+
+    # El CMD es únicamente el nombre.
+    # Los argumentos se envían después:
+    # /comando argumento
+    if (
+        " " in raw
+        or "\t" in raw
+        or "\n" in raw
+    ):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=(
+                "El nombre del CMD no puede "
+                "contener espacios."
+            ),
+        )
+
+    if len(raw) > 64:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Nombre de CMD demasiado largo.",
+        )
+
+    allowed_chars = set(
+        "abcdefghijklmnopqrstuvwxyz"
+        "0123456789_"
+    )
+
+    if any(
+        character not in allowed_chars
+        for character in raw
+    ):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=(
+                "El CMD solo puede utilizar "
+                "letras, números y guion bajo."
+            ),
+        )
 
     return command
 
@@ -248,46 +352,67 @@ def normalize_command(
 def normalize_code(
     value: str,
 ) -> str:
-    return (
+    result = (
         value
         .strip()
         .upper()
         .replace(" ", "_")
     )
+
+    if not result:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Código de CMD inválido.",
+        )
+
+    return result
 
 
 def normalize_category(
     value: str,
 ) -> str:
-    return (
+    result = (
         value
         .strip()
         .upper()
         .replace(" ", "_")
     )
 
+    if not result:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Categoría inválida.",
+        )
+
+    return result
+
+
+def normalize_optional_text(
+    value: str | None,
+) -> str | None:
+    if value is None:
+        return None
+
+    value = value.strip()
+
+    return value or None
+
 
 def normalize_versions(
     versions: list[str],
 ) -> list[str]:
-    allowed = {
-        "V1",
-        "V2",
-        "V3",
-        "V4",
-        "V5",
-    }
-
     result: list[str] = []
 
     for version in versions:
-        value = str(version).strip().upper()
+        value = (
+            str(version)
+            .strip()
+            .upper()
+        )
 
-        if value not in allowed:
+        if value not in ALLOWED_VERSIONS:
             raise HTTPException(
-                status_code=(
-                    status.HTTP_400_BAD_REQUEST
-                ),
+                status_code=status.HTTP_400_BAD_REQUEST,
                 detail=(
                     f"Versión inválida: {value}"
                 ),
@@ -299,14 +424,43 @@ def normalize_versions(
     return result
 
 
+def normalize_output_formats(
+    formats: list[str],
+) -> list[str]:
+    result: list[str] = []
+
+    for item in formats:
+        value = (
+            str(item)
+            .strip()
+            .upper()
+        )
+
+        if (
+            value
+            and value not in result
+        ):
+            result.append(value)
+
+    return result
+
+
+# =========================================================
+# ACCESO A DATOS
+# =========================================================
+
 async def get_command_or_404(
     session: AsyncSession,
     *,
     command_id: int,
 ) -> CommandModel:
+
     result = await session.execute(
-        select(CommandModel).where(
-            CommandModel.id == command_id
+        select(
+            CommandModel
+        ).where(
+            CommandModel.id
+            == command_id
         )
     )
 
@@ -316,9 +470,7 @@ async def get_command_or_404(
 
     if command_model is None:
         raise HTTPException(
-            status_code=(
-                status.HTTP_404_NOT_FOUND
-            ),
+            status_code=status.HTTP_404_NOT_FOUND,
             detail="CMD no encontrado.",
         )
 
@@ -330,9 +482,13 @@ async def get_bot_or_404(
     *,
     bot_id: int,
 ) -> BotModel:
+
     result = await session.execute(
-        select(BotModel).where(
-            BotModel.id == bot_id
+        select(
+            BotModel
+        ).where(
+            BotModel.id
+            == bot_id
         )
     )
 
@@ -340,57 +496,287 @@ async def get_bot_or_404(
 
     if bot is None:
         raise HTTPException(
-            status_code=(
-                status.HTTP_404_NOT_FOUND
-            ),
+            status_code=status.HTTP_404_NOT_FOUND,
             detail="Bot no encontrado.",
         )
 
     return bot
 
 
+# =========================================================
+# LÓGICA DE VERSIÓN
+# =========================================================
+
+def is_version_allowed(
+    command_model: CommandModel,
+    bot: BotModel,
+) -> bool:
+
+    versions = (
+        command_model.available_versions
+        or []
+    )
+
+    if not versions:
+        return True
+
+    normalized = {
+        str(version)
+        .strip()
+        .upper()
+        for version in versions
+    }
+
+    return (
+        bot.version
+        .strip()
+        .upper()
+        in normalized
+    )
+
+
+def calculate_effective_enabled(
+    *,
+    command_model: CommandModel,
+    bot: BotModel,
+    config: BotCommandModel | None,
+) -> tuple[bool, bool]:
+    """
+    Una configuración particular NUNCA puede
+    saltarse:
+
+    - enabled_global=False
+    - restricción de versión V1-V5
+    """
+
+    version_allowed = is_version_allowed(
+        command_model,
+        bot,
+    )
+
+    default_enabled = bool(
+        command_model.enabled_global
+        and version_allowed
+    )
+
+    if not default_enabled:
+        return (
+            version_allowed,
+            False,
+        )
+
+    if (
+        config is not None
+        and config.enabled_override
+        is False
+    ):
+        return (
+            version_allowed,
+            False,
+        )
+
+    return (
+        version_allowed,
+        True,
+    )
+
+
+# =========================================================
+# RESPUESTAS
+# =========================================================
+
 def command_response(
     command: CommandModel,
 ) -> CommandResponse:
+
     return CommandResponse(
         id=command.id,
         code=command.code,
         category=command.category,
         command=command.command,
         title=command.title,
-        description=command.description,
+
+        description=(
+            command.description
+        ),
+
         level=command.level,
         price=command.price,
-        result_type=command.result_type,
+
+        result_type=(
+            command.result_type
+        ),
+
         result_description=(
             command.result_description
         ),
-        output_formats=(
-            command.output_formats or []
+
+        output_formats=list(
+            command.output_formats
+            or []
         ),
-        provider_key=command.provider_key,
-        available_versions=(
-            command.available_versions or []
+
+        provider_key=(
+            command.provider_key
         ),
+
+        available_versions=list(
+            command.available_versions
+            or []
+        ),
+
         enabled_global=(
             command.enabled_global
         ),
+
         requires_registration=(
             command.requires_registration
         ),
+
         requires_authorization=(
             command.requires_authorization
         ),
+
         charge_on_no_results=(
             command.charge_on_no_results
         ),
-        sort_order=command.sort_order,
+
+        sort_order=(
+            command.sort_order
+        ),
+    )
+
+
+def bot_command_response(
+    *,
+    bot: BotModel,
+    command_model: CommandModel,
+    config: BotCommandModel | None,
+) -> BotCommandResponse:
+
+    (
+        version_allowed,
+        effective_enabled,
+    ) = calculate_effective_enabled(
+        command_model=command_model,
+        bot=bot,
+        config=config,
+    )
+
+    default_enabled = bool(
+        command_model.enabled_global
+        and version_allowed
+    )
+
+    if config is not None:
+        effective_price = (
+            config.effective_price(
+                command_model.price
+            )
+        )
+
+        effective_level = (
+            config.level_override
+            or command_model.level
+        )
+
+        title = (
+            config.title_override
+            or command_model.title
+        )
+
+    else:
+        effective_price = (
+            command_model.price
+        )
+
+        effective_level = (
+            command_model.level
+        )
+
+        title = (
+            command_model.title
+        )
+
+    return BotCommandResponse(
+        bot_id=bot.id,
+
+        command_id=(
+            command_model.id
+        ),
+
+        command=(
+            command_model.command
+        ),
+
+        title=title,
+
+        category=(
+            command_model.category
+        ),
+
+        version_allowed=(
+            version_allowed
+        ),
+
+        default_enabled=(
+            default_enabled
+        ),
+
+        effective_enabled=(
+            effective_enabled
+        ),
+
+        default_price=(
+            command_model.price
+        ),
+
+        effective_price=(
+            effective_price
+        ),
+
+        default_level=(
+            command_model.level
+        ),
+
+        effective_level=(
+            effective_level
+        ),
+
+        enabled_override=(
+            config.enabled_override
+            if config
+            else None
+        ),
+
+        price_override=(
+            config.price_override
+            if config
+            else None
+        ),
+
+        level_override=(
+            config.level_override
+            if config
+            else None
+        ),
+
+        title_override=(
+            config.title_override
+            if config
+            else None
+        ),
+
+        result_description_override=(
+            config.result_description_override
+            if config
+            else None
+        ),
     )
 
 
 # =========================================================
 # LISTAR CATÁLOGO
-# SOLO SUPERADMIN
 # =========================================================
 
 @router.get(
@@ -407,8 +793,11 @@ async def list_commands(
         Depends(get_db),
     ],
 ) -> list[CommandResponse]:
+
     result = await session.execute(
-        select(CommandModel)
+        select(
+            CommandModel
+        )
         .order_by(
             CommandModel.category.asc(),
             CommandModel.sort_order.asc(),
@@ -445,6 +834,7 @@ async def get_command(
         Depends(get_db),
     ],
 ) -> CommandResponse:
+
     command_model = await get_command_or_404(
         session,
         command_id=command_id,
@@ -475,6 +865,7 @@ async def create_command(
         Depends(get_db),
     ],
 ) -> CommandResponse:
+
     code = normalize_code(
         data.code
     )
@@ -484,25 +875,25 @@ async def create_command(
     )
 
     existing = await session.execute(
-        select(CommandModel.id).where(
-            (
-                CommandModel.code == code
-            )
-            | (
+        select(
+            CommandModel.id
+        )
+        .where(
+            or_(
+                CommandModel.code == code,
                 CommandModel.command
-                == command_name
+                == command_name,
             )
         )
+        .limit(1)
     )
 
     if (
-        existing.scalar_one_or_none()
+        existing.scalars().first()
         is not None
     ):
         raise HTTPException(
-            status_code=(
-                status.HTTP_409_CONFLICT
-            ),
+            status_code=status.HTTP_409_CONFLICT,
             detail=(
                 "Ya existe un CMD con ese "
                 "código o comando."
@@ -511,53 +902,89 @@ async def create_command(
 
     command_model = CommandModel(
         code=code,
-        category=normalize_category(
-            data.category
+
+        category=(
+            normalize_category(
+                data.category
+            )
         ),
+
         command=command_name,
-        title=data.title.strip(),
-        description=data.description,
-        level=data.level.strip().upper(),
-        price=data.price,
+
+        title=(
+            data.title.strip()
+        ),
+
+        description=(
+            normalize_optional_text(
+                data.description
+            )
+        ),
+
+        level=(
+            data.level
+            .strip()
+            .upper()
+        ),
+
+        price=(
+            data.price
+        ),
+
         result_type=(
             data.result_type
             .strip()
             .upper()
         ),
+
         result_description=(
-            data.result_description
+            normalize_optional_text(
+                data.result_description
+            )
         ),
-        output_formats=[
-            item.strip().upper()
-            for item in data.output_formats
-            if item.strip()
-        ],
+
+        output_formats=(
+            normalize_output_formats(
+                data.output_formats
+            )
+        ),
+
         provider_key=(
-            data.provider_key.strip()
-            if data.provider_key
-            else None
+            normalize_optional_text(
+                data.provider_key
+            )
         ),
+
         available_versions=(
             normalize_versions(
                 data.available_versions
             )
         ),
+
         enabled_global=(
             data.enabled_global
         ),
+
         requires_registration=(
             data.requires_registration
         ),
+
         requires_authorization=(
             data.requires_authorization
         ),
+
         charge_on_no_results=(
             data.charge_on_no_results
         ),
-        sort_order=data.sort_order,
+
+        sort_order=(
+            data.sort_order
+        ),
     )
 
-    session.add(command_model)
+    session.add(
+        command_model
+    )
 
     try:
         await session.commit()
@@ -575,7 +1002,9 @@ async def create_command(
         category="COMMAND",
         source="MASTER_PANEL",
         actor_role="SUPERADMIN",
-        command=command_model.command,
+        command=(
+            command_model.command
+        ),
         description=(
             f"CMD creado: "
             f"{command_model.title}"
@@ -585,8 +1014,12 @@ async def create_command(
     await realtime_service.publish_master(
         event_type="COMMAND_CREATED",
         data={
-            "command_id": command_model.id,
-            "command": command_model.command,
+            "command_id": (
+                command_model.id
+            ),
+            "command": (
+                command_model.command
+            ),
             "category": (
                 command_model.category
             ),
@@ -618,6 +1051,7 @@ async def update_command(
         Depends(get_db),
     ],
 ) -> CommandResponse:
+
     command_model = await get_command_or_404(
         session,
         command_id=command_id,
@@ -639,27 +1073,31 @@ async def update_command(
         "command" in fields
         and data.command is not None
     ):
+
         new_command = normalize_command(
             data.command
         )
 
         duplicate = await session.execute(
-            select(CommandModel.id).where(
+            select(
+                CommandModel.id
+            )
+            .where(
                 CommandModel.command
                 == new_command,
+
                 CommandModel.id
                 != command_model.id,
             )
+            .limit(1)
         )
 
         if (
-            duplicate.scalar_one_or_none()
+            duplicate.scalars().first()
             is not None
         ):
             raise HTTPException(
-                status_code=(
-                    status.HTTP_409_CONFLICT
-                ),
+                status_code=status.HTTP_409_CONFLICT,
                 detail=(
                     "Ese comando ya está "
                     "registrado."
@@ -680,7 +1118,9 @@ async def update_command(
 
     if "description" in fields:
         command_model.description = (
-            data.description
+            normalize_optional_text(
+                data.description
+            )
         )
 
     if (
@@ -688,14 +1128,18 @@ async def update_command(
         and data.level is not None
     ):
         command_model.level = (
-            data.level.strip().upper()
+            data.level
+            .strip()
+            .upper()
         )
 
     if (
         "price" in fields
         and data.price is not None
     ):
-        command_model.price = data.price
+        command_model.price = (
+            data.price
+        )
 
     if (
         "result_type" in fields
@@ -709,24 +1153,26 @@ async def update_command(
 
     if "result_description" in fields:
         command_model.result_description = (
-            data.result_description
+            normalize_optional_text(
+                data.result_description
+            )
         )
 
     if (
         "output_formats" in fields
         and data.output_formats is not None
     ):
-        command_model.output_formats = [
-            item.strip().upper()
-            for item in data.output_formats
-            if item.strip()
-        ]
+        command_model.output_formats = (
+            normalize_output_formats(
+                data.output_formats
+            )
+        )
 
     if "provider_key" in fields:
         command_model.provider_key = (
-            data.provider_key.strip()
-            if data.provider_key
-            else None
+            normalize_optional_text(
+                data.provider_key
+            )
         )
 
     if (
@@ -742,7 +1188,8 @@ async def update_command(
 
     if (
         "enabled_global" in fields
-        and data.enabled_global is not None
+        and data.enabled_global
+        is not None
     ):
         command_model.enabled_global = (
             data.enabled_global
@@ -799,14 +1246,20 @@ async def update_command(
         category="COMMAND",
         source="MASTER_PANEL",
         actor_role="SUPERADMIN",
-        command=command_model.command,
+        command=(
+            command_model.command
+        ),
     )
 
     await realtime_service.publish_master(
         event_type="COMMAND_UPDATED",
         data={
-            "command_id": command_model.id,
-            "command": command_model.command,
+            "command_id": (
+                command_model.id
+            ),
+            "command": (
+                command_model.command
+            ),
         },
     )
 
@@ -816,7 +1269,7 @@ async def update_command(
 
 
 # =========================================================
-# ACTIVAR / DESACTIVAR GLOBALMENTE
+# ACTIVAR / DESACTIVAR GLOBAL
 # =========================================================
 
 @router.post(
@@ -834,6 +1287,7 @@ async def enable_command(
         Depends(get_db),
     ],
 ) -> CommandResponse:
+
     command_model = await get_command_or_404(
         session,
         command_id=command_id,
@@ -879,6 +1333,7 @@ async def disable_command(
         Depends(get_db),
     ],
 ) -> CommandResponse:
+
     command_model = await get_command_or_404(
         session,
         command_id=command_id,
@@ -910,7 +1365,7 @@ async def disable_command(
 
 
 # =========================================================
-# VER CMD EFECTIVOS DE UN BOT
+# CMD EFECTIVOS DE UN BOT
 # =========================================================
 
 @router.get(
@@ -928,6 +1383,7 @@ async def get_bot_commands(
         Depends(get_db),
     ],
 ) -> list[BotCommandResponse]:
+
     bot = await get_bot_or_404(
         session,
         bot_id=bot_id,
@@ -958,148 +1414,18 @@ async def get_bot_commands(
 
     rows = result.all()
 
-    responses: list[
-        BotCommandResponse
-    ] = []
-
-    for command_model, config in rows:
-        versions = (
-            command_model.available_versions
-            or []
+    return [
+        bot_command_response(
+            bot=bot,
+            command_model=command_model,
+            config=config,
         )
-
-        version_allowed = (
-            not versions
-            or bot.version.upper()
-            in {
-                item.upper()
-                for item in versions
-            }
-        )
-
-        default_enabled = bool(
-            command_model.enabled_global
-            and version_allowed
-        )
-
-        if config is not None:
-            effective_enabled = (
-                config.effective_enabled(
-                    default_enabled
-                )
-            )
-
-            effective_price = (
-                config.effective_price(
-                    command_model.price
-                )
-            )
-
-            effective_level = (
-                config.level_override
-                or command_model.level
-            )
-
-        else:
-            effective_enabled = (
-                default_enabled
-            )
-
-            effective_price = (
-                command_model.price
-            )
-
-            effective_level = (
-                command_model.level
-            )
-
-        responses.append(
-            BotCommandResponse(
-                bot_id=bot.id,
-
-                command_id=(
-                    command_model.id
-                ),
-
-                command=(
-                    command_model.command
-                ),
-
-                title=(
-                    config.title_override
-                    if (
-                        config
-                        and config.title_override
-                    )
-                    else command_model.title
-                ),
-
-                category=(
-                    command_model.category
-                ),
-
-                default_enabled=(
-                    default_enabled
-                ),
-
-                effective_enabled=(
-                    effective_enabled
-                ),
-
-                default_price=(
-                    command_model.price
-                ),
-
-                effective_price=(
-                    effective_price
-                ),
-
-                default_level=(
-                    command_model.level
-                ),
-
-                effective_level=(
-                    effective_level
-                ),
-
-                enabled_override=(
-                    config.enabled_override
-                    if config
-                    else None
-                ),
-
-                price_override=(
-                    config.price_override
-                    if config
-                    else None
-                ),
-
-                level_override=(
-                    config.level_override
-                    if config
-                    else None
-                ),
-
-                title_override=(
-                    config.title_override
-                    if config
-                    else None
-                ),
-
-                result_description_override=(
-                    config
-                    .result_description_override
-                    if config
-                    else None
-                ),
-            )
-        )
-
-    return responses
+        for command_model, config in rows
+    ]
 
 
 # =========================================================
-# CONFIGURACIÓN PARTICULAR POR BOT
+# OVERRIDE PARTICULAR
 # =========================================================
 
 @router.put(
@@ -1110,7 +1436,7 @@ async def set_bot_command_override(
     bot_id: int,
     command_id: int,
     data: BotCommandOverrideRequest,
-    _: Annotated[
+    identity: Annotated[
         CurrentIdentity,
         Depends(require_superadmin),
     ],
@@ -1119,6 +1445,7 @@ async def set_bot_command_override(
         Depends(get_db),
     ],
 ) -> BotCommandResponse:
+
     bot = await get_bot_or_404(
         session,
         bot_id=bot_id,
@@ -1130,20 +1457,27 @@ async def set_bot_command_override(
     )
 
     result = await session.execute(
-        select(BotCommandModel).where(
+        select(
+            BotCommandModel
+        ).where(
             BotCommandModel.bot_id
             == bot.id,
+
             BotCommandModel.command_id
             == command_model.id,
         )
     )
 
-    config = result.scalar_one_or_none()
+    config = (
+        result.scalar_one_or_none()
+    )
 
     if config is None:
         config = BotCommandModel(
             bot_id=bot.id,
-            command_id=command_model.id,
+            command_id=(
+                command_model.id
+            ),
         )
 
         session.add(config)
@@ -1162,16 +1496,21 @@ async def set_bot_command_override(
 
     if "level_override" in fields:
         config.level_override = (
-            data.level_override.strip().upper()
-            if data.level_override
-            else None
+            normalize_optional_text(
+                data.level_override
+            )
         )
+
+        if config.level_override:
+            config.level_override = (
+                config.level_override.upper()
+            )
 
     if "title_override" in fields:
         config.title_override = (
-            data.title_override.strip()
-            if data.title_override
-            else None
+            normalize_optional_text(
+                data.title_override
+            )
         )
 
     if (
@@ -1179,107 +1518,55 @@ async def set_bot_command_override(
         in fields
     ):
         config.result_description_override = (
-            data.result_description_override
+            normalize_optional_text(
+                data.result_description_override
+            )
         )
 
     try:
         await session.commit()
-        await session.refresh(config)
+        await session.refresh(
+            config
+        )
 
     except Exception:
         await session.rollback()
         raise
+
+    await audit_service.success(
+        session,
+        bot_id=bot.id,
+        action="BOT_COMMAND_CHANGED",
+        category="COMMAND",
+        source="MASTER_PANEL",
+        actor_role="SUPERADMIN",
+        command=(
+            command_model.command
+        ),
+        description=(
+            "Configuración particular "
+            "del CMD actualizada."
+        ),
+    )
 
     await realtime_service.publish_bot(
         bot_id=bot.id,
         socio_id=bot.socio_id,
         event_type="BOT_COMMAND_CHANGED",
         data={
-            "command_id": command_model.id,
-            "command": command_model.command,
+            "command_id": (
+                command_model.id
+            ),
+            "command": (
+                command_model.command
+            ),
         },
     )
 
-    versions = (
-        command_model.available_versions
-        or []
-    )
-
-    version_allowed = (
-        not versions
-        or bot.version.upper()
-        in {
-            item.upper()
-            for item in versions
-        }
-    )
-
-    default_enabled = bool(
-        command_model.enabled_global
-        and version_allowed
-    )
-
-    return BotCommandResponse(
-        bot_id=bot.id,
-
-        command_id=command_model.id,
-
-        command=command_model.command,
-
-        title=(
-            config.title_override
-            or command_model.title
-        ),
-
-        category=command_model.category,
-
-        default_enabled=default_enabled,
-
-        effective_enabled=(
-            config.effective_enabled(
-                default_enabled
-            )
-        ),
-
-        default_price=(
-            command_model.price
-        ),
-
-        effective_price=(
-            config.effective_price(
-                command_model.price
-            )
-        ),
-
-        default_level=(
-            command_model.level
-        ),
-
-        effective_level=(
-            config.level_override
-            or command_model.level
-        ),
-
-        enabled_override=(
-            config.enabled_override
-        ),
-
-        price_override=(
-            config.price_override
-        ),
-
-        level_override=(
-            config.level_override
-        ),
-
-        title_override=(
-            config.title_override
-        ),
-
-        result_description_override=(
-            config
-            .result_description_override
-        ),
+    return bot_command_response(
+        bot=bot,
+        command_model=command_model,
+        config=config,
     )
 
 
@@ -1302,6 +1589,7 @@ async def delete_bot_command_override(
         Depends(get_db),
     ],
 ) -> dict:
+
     bot = await get_bot_or_404(
         session,
         bot_id=bot_id,
@@ -1313,15 +1601,20 @@ async def delete_bot_command_override(
     )
 
     result = await session.execute(
-        select(BotCommandModel).where(
+        select(
+            BotCommandModel
+        ).where(
             BotCommandModel.bot_id
             == bot.id,
+
             BotCommandModel.command_id
             == command_model.id,
         )
     )
 
-    config = result.scalar_one_or_none()
+    config = (
+        result.scalar_one_or_none()
+    )
 
     if config is None:
         return {
@@ -1333,7 +1626,10 @@ async def delete_bot_command_override(
         }
 
     try:
-        await session.delete(config)
+        await session.delete(
+            config
+        )
+
         await session.commit()
 
     except Exception:
@@ -1345,7 +1641,9 @@ async def delete_bot_command_override(
         socio_id=bot.socio_id,
         event_type="BOT_COMMAND_CHANGED",
         data={
-            "command_id": command_model.id,
+            "command_id": (
+                command_model.id
+            ),
             "override_removed": True,
         },
     )
@@ -1353,7 +1651,9 @@ async def delete_bot_command_override(
     return {
         "success": True,
         "bot_id": bot.id,
-        "command_id": command_model.id,
+        "command_id": (
+            command_model.id
+        ),
         "message": (
             "Configuración particular eliminada."
         ),
