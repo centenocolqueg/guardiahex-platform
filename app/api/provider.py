@@ -23,6 +23,10 @@ from app.config import settings
 from app.database import get_db
 from app.models.settings import SystemSettingModel
 from app.services.audit import audit_service
+from app.services.fuentesdata import (
+    ProviderSecurityError,
+    fuentesdata_service,
+)
 from app.services.realtime import realtime_service
 
 
@@ -56,13 +60,10 @@ class ProviderConfigRequest(BaseModel):
 
 class ProviderStatusResponse(BaseModel):
     enabled: bool
-
     base_url: str | None
-
     timeout: int
 
     token_configured: bool
-
     ready: bool
 
     provider_name: str = "FuentesData"
@@ -70,7 +71,6 @@ class ProviderStatusResponse(BaseModel):
 
 class ProviderTestResponse(BaseModel):
     success: bool
-
     reachable: bool
 
     status_code: int | None = None
@@ -88,17 +88,18 @@ def _validate_base_url(
     value: str,
 ) -> str:
     """
-    Valida la URL principal del proveedor.
+    Validación inicial de la URL configurada.
 
-    En producción exigimos HTTPS y rechazamos
-    destinos locales o direcciones privadas.
+    La segunda validación de seguridad,
+    incluyendo DNS, se realiza también
+    dentro de FuentesDataService.
     """
 
     value = value.strip().rstrip("/")
 
     if not value:
         raise HTTPException(
-            status_code=400,
+            status_code=status.HTTP_400_BAD_REQUEST,
             detail="La URL base está vacía.",
         )
 
@@ -109,7 +110,7 @@ def _validate_base_url(
         "https",
     }:
         raise HTTPException(
-            status_code=400,
+            status_code=status.HTTP_400_BAD_REQUEST,
             detail=(
                 "La URL debe comenzar con "
                 "http:// o https://"
@@ -121,9 +122,9 @@ def _validate_base_url(
         and parsed.scheme != "https"
     ):
         raise HTTPException(
-            status_code=400,
+            status_code=status.HTTP_400_BAD_REQUEST,
             detail=(
-                "En producción la API "
+                "En producción el proveedor "
                 "debe utilizar HTTPS."
             ),
         )
@@ -134,25 +135,24 @@ def _validate_base_url(
 
     if not hostname:
         raise HTTPException(
-            status_code=400,
+            status_code=status.HTTP_400_BAD_REQUEST,
             detail="Host de API inválido.",
         )
 
     if hostname in {
         "localhost",
+        "localhost.localdomain",
         "127.0.0.1",
         "::1",
     }:
         raise HTTPException(
-            status_code=400,
+            status_code=status.HTTP_400_BAD_REQUEST,
             detail=(
                 "No se permite utilizar "
                 "un host local."
             ),
         )
 
-    # Si el hostname es directamente una IP,
-    # impedimos direcciones internas/privadas.
     try:
         ip = ipaddress.ip_address(
             hostname
@@ -163,17 +163,19 @@ def _validate_base_url(
             or ip.is_loopback
             or ip.is_link_local
             or ip.is_reserved
+            or ip.is_unspecified
+            or ip.is_multicast
         ):
             raise HTTPException(
-                status_code=400,
+                status_code=status.HTTP_400_BAD_REQUEST,
                 detail=(
                     "No se permite utilizar "
-                    "una dirección IP privada."
+                    "una dirección de red privada."
                 ),
             )
 
     except ValueError:
-        # Es un dominio, no una IP literal.
+        # Es un nombre de dominio.
         pass
 
     return value
@@ -183,27 +185,37 @@ async def _get_saved_config(
     session: AsyncSession,
 ) -> dict[str, Any]:
     """
-    Obtiene configuración pública del proveedor.
+    Obtiene la configuración pública.
 
-    El token secreto NO se almacena aquí.
+    FUENTESDATA_TOKEN permanece únicamente
+    en el .env privado.
     """
 
     result = await session.execute(
-        select(SystemSettingModel).where(
+        select(
+            SystemSettingModel
+        ).where(
             SystemSettingModel.key
             == PROVIDER_SETTING_KEY
         )
     )
 
-    setting = result.scalar_one_or_none()
+    setting = (
+        result.scalar_one_or_none()
+    )
 
-    if setting is None:
+    if (
+        setting is None
+        or not setting.is_active
+    ):
         return {
             "enabled": (
                 settings.fuentesdata_enabled
             ),
             "base_url": (
                 settings.fuentesdata_base_url
+                .strip()
+                .rstrip("/")
                 or None
             ),
             "timeout": (
@@ -211,28 +223,64 @@ async def _get_saved_config(
             ),
         }
 
-    value = setting.value or {}
+    value = setting.value
 
-    return {
-        "enabled": bool(
-            value.get(
-                "enabled",
-                settings.fuentesdata_enabled,
-            )
-        ),
+    if not isinstance(
+        value,
+        dict,
+    ):
+        value = {}
 
-        "base_url": (
-            value.get("base_url")
-            or settings.fuentesdata_base_url
+    enabled = value.get(
+        "enabled",
+        settings.fuentesdata_enabled,
+    )
+
+    base_url = (
+        value.get("base_url")
+        or settings.fuentesdata_base_url
+        or None
+    )
+
+    if isinstance(
+        base_url,
+        str,
+    ):
+        base_url = (
+            base_url
+            .strip()
+            .rstrip("/")
             or None
-        ),
+        )
 
-        "timeout": int(
+    try:
+        timeout = int(
             value.get(
                 "timeout",
                 settings.fuentesdata_timeout,
             )
+        )
+
+    except (
+        TypeError,
+        ValueError,
+    ):
+        timeout = (
+            settings.fuentesdata_timeout
+        )
+
+    timeout = max(
+        5,
+        min(
+            timeout,
+            120,
         ),
+    )
+
+    return {
+        "enabled": bool(enabled),
+        "base_url": base_url,
+        "timeout": timeout,
     }
 
 
@@ -241,16 +289,22 @@ async def _save_config(
     *,
     config: dict[str, Any],
 ) -> None:
+
     result = await session.execute(
-        select(SystemSettingModel).where(
+        select(
+            SystemSettingModel
+        ).where(
             SystemSettingModel.key
             == PROVIDER_SETTING_KEY
         )
     )
 
-    setting = result.scalar_one_or_none()
+    setting = (
+        result.scalar_one_or_none()
+    )
 
     if setting is None:
+
         setting = SystemSettingModel(
             key=PROVIDER_SETTING_KEY,
             value=config,
@@ -279,6 +333,7 @@ async def _save_config(
 def _build_status(
     config: dict[str, Any],
 ) -> ProviderStatusResponse:
+
     enabled = bool(
         config.get("enabled")
     )
@@ -295,7 +350,9 @@ def _build_status(
     )
 
     token_configured = bool(
-        settings.fuentesdata_token
+        settings
+        .fuentesdata_token
+        .strip()
     )
 
     ready = bool(
@@ -333,11 +390,13 @@ async def provider_status(
         Depends(get_db),
     ],
 ) -> ProviderStatusResponse:
-    """
-    Muestra estado sin revelar el token.
-    """
 
     config = await _get_saved_config(
+        session
+    )
+
+    # Mantener runtime sincronizado.
+    await fuentesdata_service.refresh(
         session
     )
 
@@ -347,7 +406,7 @@ async def provider_status(
 
 
 # =========================================================
-# CONFIGURACIÓN PÚBLICA
+# ACTUALIZAR CONFIGURACIÓN
 # =========================================================
 
 @router.patch(
@@ -365,16 +424,6 @@ async def update_provider_config(
         Depends(get_db),
     ],
 ) -> ProviderStatusResponse:
-    """
-    Permite al SUPERADMIN cambiar:
-
-    - estado global ON/OFF;
-    - URL base;
-    - timeout.
-
-    El token secreto permanece fuera de esta
-    configuración y nunca se devuelve al navegador.
-    """
 
     config = await _get_saved_config(
         session
@@ -391,12 +440,14 @@ async def update_provider_config(
         )
 
     if "base_url" in fields:
+
         if data.base_url:
             config["base_url"] = (
                 _validate_base_url(
                     data.base_url
                 )
             )
+
         else:
             config["base_url"] = None
 
@@ -413,6 +464,27 @@ async def update_provider_config(
         config=config,
     )
 
+    # =====================================================
+    # APLICAR CAMBIO AL MOTOR INMEDIATAMENTE
+    # =====================================================
+
+    try:
+        await fuentesdata_service.refresh(
+            session
+        )
+
+    except Exception as exc:
+        raise HTTPException(
+            status_code=(
+                status.HTTP_500_INTERNAL_SERVER_ERROR
+            ),
+            detail=(
+                "La configuración se guardó, "
+                "pero el motor del proveedor "
+                "no pudo actualizarse."
+            ),
+        ) from exc
+
     await audit_service.success(
         session,
         action="PROVIDER_CONFIG_UPDATED",
@@ -420,20 +492,30 @@ async def update_provider_config(
         source="MASTER_PANEL",
         actor_role="SUPERADMIN",
         description=(
-            "Configuración pública "
-            "del proveedor actualizada."
+            "Configuración pública del "
+            "proveedor actualizada."
         ),
         extra_data={
             "enabled": (
                 config["enabled"]
             ),
-            "base_url_configured": bool(
-                config.get("base_url")
+            "base_url_configured": (
+                bool(
+                    config.get(
+                        "base_url"
+                    )
+                )
             ),
             "timeout": (
                 config["timeout"]
             ),
         },
+    )
+
+    status_data = (
+        _build_status(
+            config
+        )
     )
 
     await realtime_service.publish_master(
@@ -442,19 +524,15 @@ async def update_provider_config(
         ),
         data={
             "enabled": (
-                config["enabled"]
+                status_data.enabled
             ),
-            "ready": bool(
-                config.get("enabled")
-                and config.get("base_url")
-                and settings.fuentesdata_token
+            "ready": (
+                status_data.ready
             ),
         },
     )
 
-    return _build_status(
-        config
-    )
+    return status_data
 
 
 # =========================================================
@@ -475,15 +553,6 @@ async def test_provider_connection(
         Depends(get_db),
     ],
 ) -> ProviderTestResponse:
-    """
-    Comprueba conectividad con el host configurado.
-
-    No inventa rutas como /health.
-
-    Una respuesta HTTP del host demuestra
-    conectividad aunque el endpoint raíz responda
-    401, 403 o 404.
-    """
 
     config = await _get_saved_config(
         session
@@ -508,6 +577,37 @@ async def test_provider_connection(
         base_url
     )
 
+    # =====================================================
+    # SINCRONIZAR Y VALIDAR SEGURIDAD/DNS
+    # =====================================================
+
+    await fuentesdata_service.refresh(
+        session
+    )
+
+    try:
+        safe_base_url = (
+            fuentesdata_service
+            ._validate_base_url(
+                base_url
+            )
+        )
+
+        await fuentesdata_service._verify_public_dns(
+            safe_base_url
+        )
+
+    except ProviderSecurityError as exc:
+        raise HTTPException(
+            status_code=(
+                status.HTTP_400_BAD_REQUEST
+            ),
+            detail=(
+                "La URL configurada "
+                "no es segura o válida."
+            ),
+        ) from exc
+
     timeout = int(
         config.get(
             "timeout",
@@ -522,20 +622,25 @@ async def test_provider_connection(
         ),
     }
 
-    # Nunca devolvemos este valor al cliente.
-    if settings.fuentesdata_token:
-        headers["Authorization"] = (
-            f"Bearer "
-            f"{settings.fuentesdata_token}"
-        )
+    token = (
+        settings
+        .fuentesdata_token
+        .strip()
+    )
+
+    if token:
+        headers[
+            "Authorization"
+        ] = f"Bearer {token}"
 
     try:
         async with httpx.AsyncClient(
             timeout=timeout,
             follow_redirects=False,
         ) as client:
+
             response = await client.get(
-                base_url,
+                safe_base_url,
                 headers=headers,
             )
 
@@ -545,24 +650,27 @@ async def test_provider_connection(
                 * 1000
             )
 
-        # Incluso 401/403/404 demuestra
-        # que el servidor respondió.
         reachable = (
-            response.status_code < 500
+            response.status_code
+            < 500
         )
 
-        message = (
-            "Servidor del proveedor accesible."
-            if reachable
-            else (
-                "El proveedor respondió "
-                "con un error del servidor."
+        if reachable:
+            message = (
+                "Servidor del proveedor accesible."
             )
-        )
+
+        else:
+            message = (
+                "El proveedor respondió con "
+                "un error del servidor."
+            )
 
         await audit_service.success(
             session,
-            action="PROVIDER_CONNECTION_TEST",
+            action=(
+                "PROVIDER_CONNECTION_TEST"
+            ),
             category="PROVIDER",
             source="MASTER_PANEL",
             actor_role="SUPERADMIN",
@@ -588,6 +696,7 @@ async def test_provider_connection(
         )
 
     except httpx.TimeoutException:
+
         return ProviderTestResponse(
             success=False,
             reachable=False,
@@ -600,6 +709,7 @@ async def test_provider_connection(
         )
 
     except httpx.RequestError:
+
         return ProviderTestResponse(
             success=False,
             reachable=False,
@@ -616,7 +726,9 @@ async def test_provider_connection(
 # INFORMACIÓN SEGURA
 # =========================================================
 
-@router.get("/info")
+@router.get(
+    "/info",
+)
 async def provider_info(
     _: Annotated[
         CurrentIdentity,
@@ -627,33 +739,44 @@ async def provider_info(
         Depends(get_db),
     ],
 ) -> dict[str, Any]:
-    """
-    Información para la tarjeta API del
-    dashboard MASTER.
-
-    Nunca devuelve credenciales.
-    """
 
     config = await _get_saved_config(
         session
     )
 
-    status_data = _build_status(
-        config
+    await fuentesdata_service.refresh(
+        session
+    )
+
+    status_data = (
+        _build_status(
+            config
+        )
     )
 
     return {
         "provider": "FuentesData",
-        "enabled": status_data.enabled,
-        "ready": status_data.ready,
+
+        "enabled": (
+            status_data.enabled
+        ),
+
+        "ready": (
+            status_data.ready
+        ),
+
         "token_configured": (
             status_data.token_configured
         ),
+
         "base_url_configured": bool(
             status_data.base_url
         ),
+
         "timeout": (
             status_data.timeout
         ),
+
+        # Nunca revelar el secreto.
         "secret_visible": False,
     }
