@@ -5,43 +5,60 @@ from datetime import datetime, timezone
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.bots.permissions import can_manage_sellers
 from app.models.role import RoleModel
 from app.models.transaction import TransactionModel
 from app.models.user import UserModel
 from app.services.credits import (
     CreditService,
     InsufficientCreditsError,
+    InvalidCreditAmountError,
     UserNotFoundError,
     credit_service,
 )
 
+
+# =========================================================
+# ERRORES
+# =========================================================
 
 class SellerError(Exception):
     """Error general del sistema SELLER."""
 
 
 class SellerNotFoundError(SellerError):
-    """El usuario no tiene rol SELLER activo."""
+    """El usuario no posee rol SELLER activo."""
 
 
 class SellerAlreadyExistsError(SellerError):
-    """El usuario ya tiene rol SELLER."""
+    """El usuario ya posee rol SELLER activo."""
 
 
 class SellerPermissionError(SellerError):
-    """Operación SELLER no permitida."""
+    """Operación SELLER no autorizada."""
 
+
+class SellerAccountDisabledError(SellerError):
+    """La cuenta SELLER está inactiva o bloqueada."""
+
+
+# =========================================================
+# SERVICIO
+# =========================================================
 
 class SellerService:
     """
-    Servicio encargado de administrar SELLERS.
+    Administración de SELLERS.
 
-    Reglas principales:
-    - El SELLER pertenece únicamente a un bot.
-    - No puede crear créditos.
-    - Solo puede transferir desde su propio saldo.
-    - No puede transferir créditos entre bots.
-    - Todas las operaciones quedan registradas.
+    Reglas:
+
+    - SELLER pertenece solamente a un bot.
+    - SELLER nunca crea créditos.
+    - SELLER solamente transfiere saldo propio.
+    - No existen transferencias entre bots.
+    - SELLER bloqueado/inactivo no puede operar.
+    - Solo roles autorizados pueden asignar
+      o retirar SELLERS.
     """
 
     def __init__(
@@ -49,6 +66,38 @@ class SellerService:
         credits: CreditService,
     ) -> None:
         self.credits = credits
+
+
+    # =====================================================
+    # VALIDACIONES
+    # =====================================================
+
+    @staticmethod
+    def _validate_amount(
+        amount: int,
+    ) -> None:
+
+        if (
+            not isinstance(amount, int)
+            or isinstance(amount, bool)
+            or amount <= 0
+        ):
+            raise InvalidCreditAmountError(
+                "La cantidad de créditos debe "
+                "ser un entero mayor que cero."
+            )
+
+
+    @staticmethod
+    def _validate_manager_role(
+        role: str,
+    ) -> None:
+
+        if not can_manage_sellers(role):
+            raise SellerPermissionError(
+                "Tu rol no puede administrar SELLERS."
+            )
+
 
     # =====================================================
     # BUSCAR USUARIO
@@ -61,28 +110,69 @@ class SellerService:
         bot_id: int,
         telegram_id: int,
     ) -> UserModel:
-        statement = select(
-            UserModel
-        ).where(
-            UserModel.bot_id == bot_id,
-            UserModel.telegram_id == telegram_id,
-        )
 
         result = await session.execute(
-            statement
+            select(
+                UserModel
+            ).where(
+                UserModel.bot_id == bot_id,
+                UserModel.telegram_id
+                == telegram_id,
+            )
         )
 
-        user = result.scalar_one_or_none()
+        user = (
+            result.scalar_one_or_none()
+        )
 
         if user is None:
             raise UserNotFoundError(
-                "Usuario no encontrado dentro de este bot."
+                "Usuario no encontrado "
+                "dentro de este bot."
             )
 
         return user
 
+
+    async def _get_user_for_update_by_telegram_id(
+        self,
+        session: AsyncSession,
+        *,
+        bot_id: int,
+        telegram_id: int,
+    ) -> UserModel:
+        """
+        Utilizado al cambiar roles para evitar
+        dos modificaciones simultáneas.
+        """
+
+        result = await session.execute(
+            select(
+                UserModel
+            )
+            .where(
+                UserModel.bot_id == bot_id,
+                UserModel.telegram_id
+                == telegram_id,
+            )
+            .with_for_update()
+        )
+
+        user = (
+            result.scalar_one_or_none()
+        )
+
+        if user is None:
+            raise UserNotFoundError(
+                "Usuario no encontrado "
+                "dentro de este bot."
+            )
+
+        return user
+
+
     # =====================================================
-    # COMPROBAR SELLER
+    # ROL SELLER
     # =====================================================
 
     async def get_seller_role(
@@ -92,20 +182,22 @@ class SellerService:
         bot_id: int,
         user_id: int,
     ) -> RoleModel | None:
-        statement = select(
-            RoleModel
-        ).where(
-            RoleModel.bot_id == bot_id,
-            RoleModel.user_id == user_id,
-            RoleModel.role == "SELLER",
-            RoleModel.is_active.is_(True),
-        )
 
         result = await session.execute(
-            statement
+            select(
+                RoleModel
+            ).where(
+                RoleModel.bot_id == bot_id,
+                RoleModel.user_id == user_id,
+                RoleModel.role == "SELLER",
+                RoleModel.is_active.is_(True),
+            )
         )
 
-        return result.scalar_one_or_none()
+        return (
+            result.scalar_one_or_none()
+        )
+
 
     async def is_seller(
         self,
@@ -114,6 +206,7 @@ class SellerService:
         bot_id: int,
         user_id: int,
     ) -> bool:
+
         role = await self.get_seller_role(
             session,
             bot_id=bot_id,
@@ -121,6 +214,7 @@ class SellerService:
         )
 
         return role is not None
+
 
     # =====================================================
     # /seller
@@ -136,34 +230,52 @@ class SellerService:
         assigned_by_role: str,
     ) -> RoleModel:
         """
-        Asigna el rol SELLER a un usuario registrado.
+        Asigna SELLER a un usuario ya registrado.
 
         Ejemplo:
+
         /seller 123456789
         """
 
-        target = await self.get_user_by_telegram_id(
-            session,
-            bot_id=bot_id,
-            telegram_id=target_telegram_id,
+        self._validate_manager_role(
+            assigned_by_role
         )
 
-        statement = select(
-            RoleModel
-        ).where(
-            RoleModel.bot_id == bot_id,
-            RoleModel.user_id == target.id,
-            RoleModel.role == "SELLER",
+        target = (
+            await self._get_user_for_update_by_telegram_id(
+                session,
+                bot_id=bot_id,
+                telegram_id=target_telegram_id,
+            )
         )
+
+        if (
+            not target.is_registered
+            or not target.is_active
+            or target.is_banned
+        ):
+            raise SellerAccountDisabledError(
+                "El usuario no tiene una "
+                "cuenta habilitada."
+            )
 
         result = await session.execute(
-            statement
+            select(
+                RoleModel
+            ).where(
+                RoleModel.bot_id == bot_id,
+                RoleModel.user_id == target.id,
+                RoleModel.role == "SELLER",
+            )
         )
 
-        role = result.scalar_one_or_none()
+        role = (
+            result.scalar_one_or_none()
+        )
 
         try:
             if role is not None:
+
                 if role.is_active:
                     raise SellerAlreadyExistsError(
                         "El usuario ya es SELLER."
@@ -171,14 +283,21 @@ class SellerService:
 
                 role.is_active = True
                 role.revoked_at = None
+
                 role.assigned_by_telegram_id = (
                     assigned_by_telegram_id
                 )
+
                 role.assigned_by_role = (
-                    assigned_by_role.upper()
+                    assigned_by_role
+                    .strip()
+                    .upper()
                 )
-                role.updated_at = datetime.now(
-                    timezone.utc
+
+                role.updated_at = (
+                    datetime.now(
+                        timezone.utc
+                    )
                 )
 
             else:
@@ -187,24 +306,32 @@ class SellerService:
                     user_id=target.id,
                     role="SELLER",
                     is_active=True,
+
                     assigned_by_telegram_id=(
                         assigned_by_telegram_id
                     ),
+
                     assigned_by_role=(
-                        assigned_by_role.upper()
+                        assigned_by_role
+                        .strip()
+                        .upper()
                     ),
                 )
 
                 session.add(role)
 
             await session.commit()
-            await session.refresh(role)
+
+            await session.refresh(
+                role
+            )
 
             return role
 
         except Exception:
             await session.rollback()
             raise
+
 
     # =====================================================
     # /unseller
@@ -216,17 +343,24 @@ class SellerService:
         *,
         bot_id: int,
         target_telegram_id: int,
+        removed_by_role: str,
     ) -> RoleModel:
         """
-        Desactiva el rol SELLER.
+        Retira el rol SELLER.
 
-        Los créditos del usuario permanecen intactos.
+        El saldo del usuario permanece intacto.
         """
 
-        target = await self.get_user_by_telegram_id(
-            session,
-            bot_id=bot_id,
-            telegram_id=target_telegram_id,
+        self._validate_manager_role(
+            removed_by_role
+        )
+
+        target = (
+            await self._get_user_for_update_by_telegram_id(
+                session,
+                bot_id=bot_id,
+                telegram_id=target_telegram_id,
+            )
         )
 
         role = await self.get_seller_role(
@@ -242,18 +376,31 @@ class SellerService:
 
         try:
             role.is_active = False
-            role.revoked_at = datetime.now(
-                timezone.utc
+
+            role.revoked_at = (
+                datetime.now(
+                    timezone.utc
+                )
+            )
+
+            role.updated_at = (
+                datetime.now(
+                    timezone.utc
+                )
             )
 
             await session.commit()
-            await session.refresh(role)
+
+            await session.refresh(
+                role
+            )
 
             return role
 
         except Exception:
             await session.rollback()
             raise
+
 
     # =====================================================
     # /sellers
@@ -266,20 +413,36 @@ class SellerService:
         bot_id: int,
     ) -> list[UserModel]:
         """
-        Devuelve únicamente SELLERS activos
-        pertenecientes al bot indicado.
+        Lista solamente vendedores actualmente
+        autorizados y con cuenta operativa.
         """
 
-        statement = (
-            select(UserModel)
+        result = await session.execute(
+            select(
+                UserModel
+            )
             .join(
                 RoleModel,
-                RoleModel.user_id == UserModel.id,
+                (
+                    RoleModel.user_id
+                    == UserModel.id
+                )
+                & (
+                    RoleModel.bot_id
+                    == UserModel.bot_id
+                ),
             )
             .where(
                 UserModel.bot_id == bot_id,
-                RoleModel.bot_id == bot_id,
+
+                UserModel.is_registered.is_(True),
+
+                UserModel.is_active.is_(True),
+
+                UserModel.is_banned.is_(False),
+
                 RoleModel.role == "SELLER",
+
                 RoleModel.is_active.is_(True),
             )
             .order_by(
@@ -287,13 +450,13 @@ class SellerService:
             )
         )
 
-        result = await session.execute(
-            statement
+        return list(
+            result
+            .scalars()
+            .unique()
+            .all()
         )
 
-        return list(
-            result.scalars().unique().all()
-        )
 
     # =====================================================
     # SALDO SELLER
@@ -306,22 +469,42 @@ class SellerService:
         bot_id: int,
         seller_telegram_id: int,
     ) -> int:
-        seller = await self.get_user_by_telegram_id(
-            session,
-            bot_id=bot_id,
-            telegram_id=seller_telegram_id,
+
+        seller = (
+            await self.get_user_by_telegram_id(
+                session,
+                bot_id=bot_id,
+                telegram_id=(
+                    seller_telegram_id
+                ),
+            )
         )
 
-        if not await self.is_seller(
+        role = await self.get_seller_role(
             session,
             bot_id=bot_id,
             user_id=seller.id,
-        ):
+        )
+
+        if role is None:
             raise SellerNotFoundError(
                 "No tienes rol SELLER activo."
             )
 
-        return seller.credits
+        if (
+            not seller.is_registered
+            or not seller.is_active
+            or seller.is_banned
+        ):
+            raise SellerAccountDisabledError(
+                "La cuenta SELLER no "
+                "se encuentra habilitada."
+            )
+
+        return int(
+            seller.credits
+        )
+
 
     # =====================================================
     # SELLER → /cred
@@ -337,42 +520,58 @@ class SellerService:
         amount: int,
     ) -> TransactionModel:
         """
-        Regla central del SELLER:
-
-        El vendedor únicamente puede entregar
-        créditos existentes en su propio saldo.
+        SELLER solamente entrega créditos
+        existentes en su propio saldo.
 
         Ejemplo:
 
-        SELLER tiene 3200
+        saldo SELLER = 3200
+
         /cred 987654321 200
 
-        SELLER queda con 3000
-        usuario destino recibe +200
+        nuevo saldo SELLER = 3000
+        usuario destino = +200
         """
 
-        seller = await self.get_user_by_telegram_id(
-            session,
-            bot_id=bot_id,
-            telegram_id=seller_telegram_id,
+        self._validate_amount(
+            amount
         )
 
-        target = await self.get_user_by_telegram_id(
-            session,
-            bot_id=bot_id,
-            telegram_id=target_telegram_id,
-        )
-
-        if seller.id == target.id:
+        if (
+            seller_telegram_id
+            == target_telegram_id
+        ):
             raise SellerPermissionError(
                 "Un SELLER no puede transferirse "
                 "créditos a sí mismo."
             )
 
-        seller_role = await self.get_seller_role(
-            session,
-            bot_id=bot_id,
-            user_id=seller.id,
+        seller = (
+            await self.get_user_by_telegram_id(
+                session,
+                bot_id=bot_id,
+                telegram_id=(
+                    seller_telegram_id
+                ),
+            )
+        )
+
+        target = (
+            await self.get_user_by_telegram_id(
+                session,
+                bot_id=bot_id,
+                telegram_id=(
+                    target_telegram_id
+                ),
+            )
+        )
+
+        seller_role = (
+            await self.get_seller_role(
+                session,
+                bot_id=bot_id,
+                user_id=seller.id,
+            )
         )
 
         if seller_role is None:
@@ -380,16 +579,29 @@ class SellerService:
                 "No tienes rol SELLER activo."
             )
 
-        if not seller.is_active or seller.is_banned:
-            raise SellerPermissionError(
-                "La cuenta SELLER no está habilitada."
+        if (
+            not seller.is_registered
+            or not seller.is_active
+            or seller.is_banned
+        ):
+            raise SellerAccountDisabledError(
+                "La cuenta SELLER no "
+                "se encuentra habilitada."
             )
 
-        if not target.is_active or target.is_banned:
+        if (
+            not target.is_registered
+            or not target.is_active
+            or target.is_banned
+        ):
             raise SellerPermissionError(
-                "El usuario destino no está habilitado."
+                "El usuario destino no "
+                "se encuentra habilitado."
             )
 
+        # Comprobación rápida para mensaje amigable.
+        # CreditService vuelve a comprobar el saldo
+        # después de bloquear las filas.
         if seller.credits < amount:
             raise InsufficientCreditsError(
                 "No tienes créditos suficientes "
@@ -398,18 +610,32 @@ class SellerService:
 
         return await self.credits.transfer_credits(
             session,
+
             bot_id=bot_id,
-            source_user_id=seller.id,
-            target_user_id=target.id,
+
+            source_user_id=(
+                seller.id
+            ),
+
+            target_user_id=(
+                target.id
+            ),
+
             amount=amount,
+
             performed_by_telegram_id=(
                 seller_telegram_id
             ),
+
             performed_by_role="SELLER",
-            transaction_type="SELLER_TRANSFER",
+
+            transaction_type=(
+                "SELLER_TRANSFER"
+            ),
+
             description=(
-                "Transferencia de créditos realizada "
-                "por SELLER."
+                "Transferencia de créditos "
+                "realizada por SELLER."
             ),
         )
 
