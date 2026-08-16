@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 from datetime import datetime, timezone
 
 from sqlalchemy import (
@@ -10,27 +12,41 @@ from sqlalchemy import (
     Text,
     UniqueConstraint,
 )
-from sqlalchemy.orm import Mapped, mapped_column, relationship
+from sqlalchemy.orm import (
+    Mapped,
+    mapped_column,
+    relationship,
+)
 
 from app.database import Base
 
+
+# =========================================================
+# CATÁLOGO MAESTRO DE CMD
+# =========================================================
 
 class CommandModel(Base):
     """
     Catálogo maestro de comandos de GUARDIAHEXBOT.
 
-    Aquí se define:
+    Define:
+
+    - código interno;
     - categoría;
-    - comando;
+    - comando Telegram;
     - nombre del servicio;
-    - precio;
+    - costo en créditos;
     - nivel;
     - versiones habilitadas;
     - tipo de resultado;
+    - formatos de salida;
     - clave interna del proveedor.
 
-    No se guardan URLs privadas ni tokens del
-    proveedor dentro de este modelo.
+    Nunca guarda:
+    - tokens;
+    - claves API;
+    - URLs privadas;
+    - credenciales del proveedor.
     """
 
     __tablename__ = "commands"
@@ -76,7 +92,7 @@ class CommandModel(Base):
     )
 
     # =====================================================
-    # NIVEL / PRECIO
+    # NIVEL / COSTO
     # =====================================================
 
     level: Mapped[str] = mapped_column(
@@ -100,6 +116,7 @@ class CommandModel(Base):
         String(30),
         default="TEXT",
         nullable=False,
+        index=True,
     )
 
     result_description: Mapped[str | None] = mapped_column(
@@ -107,13 +124,15 @@ class CommandModel(Base):
         nullable=True,
     )
 
-    # Ejemplos posibles:
+    # Posibles formatos:
+    #
     # TEXT
     # IMAGE
     # PDF
     # FILE
     # MULTI
     # JSON
+
     output_formats: Mapped[list[str]] = mapped_column(
         JSON,
         default=list,
@@ -121,7 +140,7 @@ class CommandModel(Base):
     )
 
     # =====================================================
-    # CONEXIÓN INTERNA
+    # PROVEEDOR
     # =====================================================
 
     provider_key: Mapped[str | None] = mapped_column(
@@ -181,19 +200,25 @@ class CommandModel(Base):
 
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
-        default=lambda: datetime.now(timezone.utc),
+        default=lambda: datetime.now(
+            timezone.utc
+        ),
         nullable=False,
     )
 
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
-        default=lambda: datetime.now(timezone.utc),
-        onupdate=lambda: datetime.now(timezone.utc),
+        default=lambda: datetime.now(
+            timezone.utc
+        ),
+        onupdate=lambda: datetime.now(
+            timezone.utc
+        ),
         nullable=False,
     )
 
     # =====================================================
-    # CONFIGURACIONES POR BOT
+    # CONFIGURACIÓN POR BOT
     # =====================================================
 
     bot_configs = relationship(
@@ -207,37 +232,183 @@ class CommandModel(Base):
     # UTILIDADES
     # =====================================================
 
+    @property
+    def normalized_code(self) -> str:
+        return (
+            str(self.code)
+            .strip()
+            .upper()
+        )
+
+    @property
+    def normalized_category(self) -> str:
+        return (
+            str(self.category)
+            .strip()
+            .upper()
+        )
+
+    @property
+    def normalized_command(self) -> str:
+        """
+        Devuelve el comando sin espacios
+        y siempre con / al inicio.
+        """
+
+        value = (
+            str(self.command)
+            .strip()
+            .lower()
+        )
+
+        if not value.startswith("/"):
+            value = f"/{value}"
+
+        return value
+
+    @property
+    def normalized_level(self) -> str:
+        return (
+            str(self.level)
+            .strip()
+            .upper()
+        )
+
+    @property
+    def normalized_result_type(self) -> str:
+        return (
+            str(self.result_type)
+            .strip()
+            .upper()
+        )
+
+    @property
+    def normalized_output_formats(
+        self,
+    ) -> list[str]:
+
+        formats: list[str] = []
+
+        for item in (
+            self.output_formats
+            or []
+        ):
+
+            value = (
+                str(item)
+                .strip()
+                .upper()
+            )
+
+            if (
+                value
+                and value not in formats
+            ):
+                formats.append(
+                    value
+                )
+
+        return formats
+
     def available_for_version(
         self,
         version: str,
     ) -> bool:
+        """
+        Fail-closed:
+
+        Si no existen versiones configuradas,
+        el comando NO queda habilitado.
+
+        Esto evita que un CMD incompleto termine
+        disponible accidentalmente en todos los bots.
+        """
+
         if not self.available_versions:
-            return True
+            return False
 
-        version = version.strip().upper()
+        normalized_version = (
+            str(version)
+            .strip()
+            .upper()
+        )
 
-        return version in {
-            item.upper()
-            for item in self.available_versions
+        if normalized_version not in {
+            "V1",
+            "V2",
+            "V3",
+            "V4",
+            "V5",
+        }:
+            return False
+
+        allowed_versions = {
+            str(item)
+            .strip()
+            .upper()
+
+            for item
+            in self.available_versions
+
+            if str(item).strip()
         }
+
+        return (
+            normalized_version
+            in allowed_versions
+        )
+
+    def effective_global_enabled(
+        self,
+        version: str,
+    ) -> bool:
+        """
+        El CMD solo está globalmente disponible si:
+
+        1. enabled_global = True
+        2. pertenece a la versión solicitada
+        """
+
+        if not self.enabled_global:
+            return False
+
+        return self.available_for_version(
+            version
+        )
 
     def __repr__(self) -> str:
         return (
-            f"<CommandModel "
+            "<CommandModel "
             f"id={self.id} "
+            f"code={self.code!r} "
             f"command={self.command!r} "
             f"category={self.category!r} "
-            f"price={self.price}>"
+            f"price={self.price} "
+            f"enabled={self.enabled_global}>"
         )
 
 
+# =========================================================
+# CONFIGURACIÓN CMD POR BOT
+# =========================================================
+
 class BotCommandModel(Base):
     """
-    Configuración individual de un CMD
-    dentro de un bot específico.
+    Override individual de un CMD para un bot.
 
-    Permite al SUPERADMIN modificar un bot
-    sin alterar el catálogo maestro.
+    El SUPERADMIN puede modificar:
+
+    - estado;
+    - precio;
+    - nivel;
+    - título;
+    - descripción.
+
+    IMPORTANTE:
+
+    Un override nunca puede activar un comando
+    bloqueado globalmente o no disponible
+    para la versión del bot.
     """
 
     __tablename__ = "bot_commands"
@@ -246,9 +417,15 @@ class BotCommandModel(Base):
         UniqueConstraint(
             "bot_id",
             "command_id",
-            name="uq_bot_commands_bot_command",
+            name=(
+                "uq_bot_commands_bot_command"
+            ),
         ),
     )
+
+    # =====================================================
+    # IDENTIFICACIÓN
+    # =====================================================
 
     id: Mapped[int] = mapped_column(
         Integer,
@@ -278,27 +455,37 @@ class BotCommandModel(Base):
     # OVERRIDES
     # =====================================================
 
-    enabled_override: Mapped[bool | None] = mapped_column(
+    enabled_override: Mapped[
+        bool | None
+    ] = mapped_column(
         Boolean,
         nullable=True,
     )
 
-    price_override: Mapped[int | None] = mapped_column(
+    price_override: Mapped[
+        int | None
+    ] = mapped_column(
         Integer,
         nullable=True,
     )
 
-    level_override: Mapped[str | None] = mapped_column(
+    level_override: Mapped[
+        str | None
+    ] = mapped_column(
         String(50),
         nullable=True,
     )
 
-    title_override: Mapped[str | None] = mapped_column(
+    title_override: Mapped[
+        str | None
+    ] = mapped_column(
         String(160),
         nullable=True,
     )
 
-    result_description_override: Mapped[str | None] = mapped_column(
+    result_description_override: Mapped[
+        str | None
+    ] = mapped_column(
         Text,
         nullable=True,
     )
@@ -309,14 +496,20 @@ class BotCommandModel(Base):
 
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
-        default=lambda: datetime.now(timezone.utc),
+        default=lambda: datetime.now(
+            timezone.utc
+        ),
         nullable=False,
     )
 
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
-        default=lambda: datetime.now(timezone.utc),
-        onupdate=lambda: datetime.now(timezone.utc),
+        default=lambda: datetime.now(
+            timezone.utc
+        ),
+        onupdate=lambda: datetime.now(
+            timezone.utc
+        ),
         nullable=False,
     )
 
@@ -341,24 +534,121 @@ class BotCommandModel(Base):
         self,
         default_price: int,
     ) -> int:
-        if self.price_override is not None:
-            return self.price_override
+        """
+        Nunca devuelve precios negativos.
+        """
 
-        return default_price
+        value = (
+            self.price_override
+            if self.price_override
+            is not None
+            else default_price
+        )
+
+        try:
+            value = int(value)
+
+        except (
+            TypeError,
+            ValueError,
+        ):
+            value = 0
+
+        return max(
+            0,
+            value,
+        )
 
     def effective_enabled(
         self,
         default_enabled: bool,
     ) -> bool:
-        if self.enabled_override is not None:
-            return self.enabled_override
+        """
+        Fail-closed.
 
-        return default_enabled
+        Si el comando maestro está OFF,
+        ningún bot puede reactivarlo.
+
+        Si está ON:
+        - override False -> OFF
+        - override True  -> ON
+        - override None  -> ON
+        """
+
+        if not default_enabled:
+            return False
+
+        if self.enabled_override is False:
+            return False
+
+        return True
+
+    def effective_level(
+        self,
+        default_level: str,
+    ) -> str:
+
+        value = (
+            self.level_override
+            if self.level_override
+            is not None
+            else default_level
+        )
+
+        return (
+            str(value)
+            .strip()
+            .upper()
+        )
+
+    def effective_title(
+        self,
+        default_title: str,
+    ) -> str:
+
+        value = (
+            self.title_override
+            if self.title_override
+            is not None
+            else default_title
+        )
+
+        return (
+            str(value)
+            .strip()
+        )
+
+    def effective_result_description(
+        self,
+        default_description: str | None,
+    ) -> str | None:
+
+        value = (
+            self.result_description_override
+            if self.result_description_override
+            is not None
+            else default_description
+        )
+
+        if value is None:
+            return None
+
+        result = (
+            str(value)
+            .strip()
+        )
+
+        return (
+            result
+            or None
+        )
 
     def __repr__(self) -> str:
         return (
-            f"<BotCommandModel "
+            "<BotCommandModel "
             f"id={self.id} "
             f"bot_id={self.bot_id} "
-            f"command_id={self.command_id}>"
+            f"command_id={self.command_id} "
+            f"enabled_override="
+            f"{self.enabled_override}>"
         )
