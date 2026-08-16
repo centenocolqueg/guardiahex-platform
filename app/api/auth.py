@@ -1,7 +1,10 @@
 from __future__ import annotations
 
+import hmac
+import os
 from typing import Annotated, Literal
 
+from dotenv import load_dotenv
 from fastapi import (
     APIRouter,
     Depends,
@@ -24,6 +27,33 @@ from app.security import (
     verify_password,
 )
 
+
+# =========================================================
+# VARIABLES PRIVADAS
+# =========================================================
+
+load_dotenv()
+
+SUPERADMIN_USERNAME = (
+    os.getenv(
+        "SUPERADMIN_USERNAME",
+        "SUPERADMIN",
+    )
+    .strip()
+)
+
+SUPERADMIN_PASSWORD_HASH = (
+    os.getenv(
+        "SUPERADMIN_PASSWORD_HASH",
+        "",
+    )
+    .strip()
+)
+
+
+# =========================================================
+# ROUTER
+# =========================================================
 
 router = APIRouter(
     prefix="/auth",
@@ -53,6 +83,7 @@ class LoginRequest(BaseModel):
 
 class LoginResponse(BaseModel):
     access_token: str
+
     token_type: str = "bearer"
 
     account_type: Literal[
@@ -60,24 +91,31 @@ class LoginResponse(BaseModel):
         "PARTNER",
     ]
 
+    # El frontend utiliza role para decidir
+    # qué panel debe abrir.
+    role: Literal[
+        "SUPERADMIN",
+        "PARTNER",
+    ]
+
     socio_id: int | None = None
+
     display_name: str
+
     must_change_password: bool = False
 
 
 class CurrentIdentity(BaseModel):
     """
-    Identidad autenticada dentro del panel.
-
-    SUPERADMIN:
-        acceso global.
-
-    PARTNER:
-        acceso limitado únicamente a su socio
-        y a los bots asociados a ese socio.
+    Identidad autenticada dentro de la plataforma.
     """
 
     account_type: Literal[
+        "SUPERADMIN",
+        "PARTNER",
+    ]
+
+    role: Literal[
         "SUPERADMIN",
         "PARTNER",
     ]
@@ -92,7 +130,30 @@ class CurrentIdentity(BaseModel):
 
 
 # =========================================================
-# LOGIN DE SOCIOS
+# ERROR DE LOGIN
+# =========================================================
+
+def invalid_credentials() -> HTTPException:
+    """
+    Devuelve siempre el mismo error para evitar
+    revelar si el usuario existe o no.
+    """
+
+    return HTTPException(
+        status_code=(
+            status.HTTP_401_UNAUTHORIZED
+        ),
+        detail=(
+            "Usuario o contraseña incorrectos."
+        ),
+        headers={
+            "WWW-Authenticate": "Bearer"
+        },
+    )
+
+
+# =========================================================
+# LOGIN
 # =========================================================
 
 @router.post(
@@ -107,60 +168,151 @@ async def login(
     ],
 ) -> LoginResponse:
     """
-    Login del panel de socios.
+    Login único para:
 
-    Las contraseñas se comparan únicamente
-    contra su hash almacenado.
+    - SUPERADMIN
+    - PARTNER
+
+    Las contraseñas nunca se almacenan
+    ni se comparan en texto plano.
     """
 
-    username = data.username.strip()
-
-    statement = select(
-        SocioModel
-    ).where(
-        SocioModel.username == username,
-        SocioModel.is_active.is_(True),
+    username = (
+        data.username
+        .strip()
     )
+
+    password = (
+        data.password
+    )
+
+
+    # =====================================================
+    # SUPERADMIN
+    # =====================================================
+
+    master_username_match = (
+        hmac.compare_digest(
+            username.casefold(),
+            SUPERADMIN_USERNAME.casefold(),
+        )
+    )
+
+    if master_username_match:
+
+        # El SUPERADMIN no puede iniciar sesión
+        # hasta configurar el hash en el VPS.
+        if not SUPERADMIN_PASSWORD_HASH:
+            raise invalid_credentials()
+
+        if not verify_password(
+            password,
+            SUPERADMIN_PASSWORD_HASH,
+        ):
+            raise invalid_credentials()
+
+
+        token = create_access_token(
+            subject="superadmin",
+            extra_claims={
+                "account_type": (
+                    "SUPERADMIN"
+                ),
+                "role": (
+                    "SUPERADMIN"
+                ),
+                "username": (
+                    SUPERADMIN_USERNAME
+                ),
+            },
+        )
+
+
+        return LoginResponse(
+            access_token=token,
+            token_type="bearer",
+            account_type=(
+                "SUPERADMIN"
+            ),
+            role=(
+                "SUPERADMIN"
+            ),
+            socio_id=None,
+            display_name=(
+                "SUPERADMIN"
+            ),
+            must_change_password=False,
+        )
+
+
+    # =====================================================
+    # SOCIO
+    # =====================================================
+
+    statement = (
+        select(
+            SocioModel
+        )
+        .where(
+            SocioModel.username
+            == username,
+
+            SocioModel.is_active
+            .is_(True),
+        )
+    )
+
 
     result = await session.execute(
         statement
     )
 
-    socio = result.scalar_one_or_none()
+    socio = (
+        result.scalar_one_or_none()
+    )
 
-    if (
-        socio is None
-        or not verify_password(
-            data.password,
-            socio.password_hash,
-        )
+
+    if socio is None:
+        raise invalid_credentials()
+
+
+    if not verify_password(
+        password,
+        socio.password_hash,
     ):
-        raise HTTPException(
-            status_code=(
-                status.HTTP_401_UNAUTHORIZED
-            ),
-            detail=(
-                "Usuario o contraseña incorrectos."
-            ),
-            headers={
-                "WWW-Authenticate": "Bearer"
-            },
-        )
+        raise invalid_credentials()
+
 
     token = create_access_token(
-        subject=f"socio:{socio.id}",
+        subject=(
+            f"socio:{socio.id}"
+        ),
         extra_claims={
-            "account_type": "PARTNER",
-            "socio_id": socio.id,
-            "username": socio.username,
+            "account_type": (
+                "PARTNER"
+            ),
+            "role": (
+                "PARTNER"
+            ),
+            "socio_id": (
+                socio.id
+            ),
+            "username": (
+                socio.username
+            ),
         },
     )
 
+
     return LoginResponse(
         access_token=token,
+        token_type="bearer",
         account_type="PARTNER",
+        role="PARTNER",
         socio_id=socio.id,
-        display_name=socio.display_name,
+        display_name=(
+            socio.display_name
+        ),
         must_change_password=(
             socio.must_change_password
         ),
@@ -168,25 +320,29 @@ async def login(
 
 
 # =========================================================
-# TOKEN INTERNO SUPERADMIN
+# CREAR TOKEN SUPERADMIN INTERNAMENTE
 # =========================================================
 
 def create_superadmin_panel_token(
     username: str = "SUPERADMIN",
 ) -> str:
     """
-    Genera el JWT del SUPERADMIN únicamente después
-    de que la capa de autenticación MASTER haya
-    validado sus credenciales.
-
-    No expone una contraseña maestra en el código.
+    Genera un token SUPERADMIN para procesos
+    internos que ya hayan validado la identidad.
     """
 
     return create_access_token(
         subject="superadmin",
         extra_claims={
-            "account_type": "SUPERADMIN",
-            "username": username,
+            "account_type": (
+                "SUPERADMIN"
+            ),
+            "role": (
+                "SUPERADMIN"
+            ),
+            "username": (
+                username
+            ),
         },
     )
 
@@ -197,8 +353,11 @@ def create_superadmin_panel_token(
 
 async def get_current_identity(
     credentials: Annotated[
-        HTTPAuthorizationCredentials | None,
-        Depends(security_scheme),
+        HTTPAuthorizationCredentials
+        | None,
+        Depends(
+            security_scheme
+        ),
     ],
     session: Annotated[
         AsyncSession,
@@ -206,8 +365,7 @@ async def get_current_identity(
     ],
 ) -> CurrentIdentity:
     """
-    Valida el JWT y devuelve la identidad
-    utilizada por las demás rutas del panel.
+    Verifica JWT y reconstruye la identidad.
     """
 
     if credentials is None:
@@ -215,15 +373,21 @@ async def get_current_identity(
             status_code=(
                 status.HTTP_401_UNAUTHORIZED
             ),
-            detail="Sesión no autenticada.",
+            detail=(
+                "Sesión no autenticada."
+            ),
             headers={
-                "WWW-Authenticate": "Bearer"
+                "WWW-Authenticate": (
+                    "Bearer"
+                )
             },
         )
+
 
     payload = decode_access_token(
         credentials.credentials
     )
+
 
     if payload is None:
         raise HTTPException(
@@ -234,9 +398,12 @@ async def get_current_identity(
                 "Sesión inválida o expirada."
             ),
             headers={
-                "WWW-Authenticate": "Bearer"
+                "WWW-Authenticate": (
+                    "Bearer"
+                )
             },
         )
+
 
     account_type = str(
         payload.get(
@@ -245,31 +412,50 @@ async def get_current_identity(
         )
     ).upper()
 
+
     # =====================================================
     # SUPERADMIN
     # =====================================================
 
     if account_type == "SUPERADMIN":
-        if payload.get("sub") != "superadmin":
+
+        if (
+            payload.get("sub")
+            != "superadmin"
+        ):
             raise HTTPException(
                 status_code=(
                     status.HTTP_401_UNAUTHORIZED
                 ),
-                detail="Token MASTER inválido.",
+                detail=(
+                    "Token MASTER inválido."
+                ),
             )
 
+
+        username = str(
+            payload.get(
+                "username",
+                SUPERADMIN_USERNAME,
+            )
+        )
+
+
         return CurrentIdentity(
-            account_type="SUPERADMIN",
-            username=str(
-                payload.get(
-                    "username",
-                    "SUPERADMIN",
-                )
+            account_type=(
+                "SUPERADMIN"
             ),
+            role=(
+                "SUPERADMIN"
+            ),
+            username=username,
             socio_id=None,
-            display_name="SUPERADMIN",
+            display_name=(
+                "SUPERADMIN"
+            ),
             must_change_password=False,
         )
+
 
     # =====================================================
     # SOCIO
@@ -280,52 +466,79 @@ async def get_current_identity(
             status_code=(
                 status.HTTP_401_UNAUTHORIZED
             ),
-            detail="Tipo de cuenta inválido.",
+            detail=(
+                "Tipo de cuenta inválido."
+            ),
         )
+
 
     socio_id_raw = payload.get(
         "socio_id"
     )
 
+
     try:
         socio_id = int(
             socio_id_raw
         )
+
     except (
         TypeError,
         ValueError,
-    ):
+    ) as exc:
+
         raise HTTPException(
             status_code=(
                 status.HTTP_401_UNAUTHORIZED
             ),
-            detail="Token de socio inválido.",
-        )
+            detail=(
+                "Token de socio inválido."
+            ),
+        ) from exc
+
 
     expected_subject = (
         f"socio:{socio_id}"
     )
 
-    if payload.get("sub") != expected_subject:
+
+    if (
+        payload.get("sub")
+        != expected_subject
+    ):
         raise HTTPException(
             status_code=(
                 status.HTTP_401_UNAUTHORIZED
             ),
-            detail="Token de socio inválido.",
+            detail=(
+                "Token de socio inválido."
+            ),
         )
 
-    statement = select(
-        SocioModel
-    ).where(
-        SocioModel.id == socio_id,
-        SocioModel.is_active.is_(True),
+
+    statement = (
+        select(
+            SocioModel
+        )
+        .where(
+            SocioModel.id
+            == socio_id,
+
+            SocioModel.is_active
+            .is_(True),
+        )
     )
+
 
     result = await session.execute(
         statement
     )
 
-    socio = result.scalar_one_or_none()
+
+    socio = (
+        result.scalar_one_or_none()
+    )
+
 
     if socio is None:
         raise HTTPException(
@@ -333,15 +546,24 @@ async def get_current_identity(
                 status.HTTP_403_FORBIDDEN
             ),
             detail=(
-                "La cuenta del socio está deshabilitada."
+                "La cuenta del socio "
+                "está deshabilitada."
             ),
         )
 
+
     return CurrentIdentity(
         account_type="PARTNER",
-        username=socio.username,
-        socio_id=socio.id,
-        display_name=socio.display_name,
+        role="PARTNER",
+        username=(
+            socio.username
+        ),
+        socio_id=(
+            socio.id
+        ),
+        display_name=(
+            socio.display_name
+        ),
         must_change_password=(
             socio.must_change_password
         ),
@@ -355,10 +577,16 @@ async def get_current_identity(
 async def require_superadmin(
     identity: Annotated[
         CurrentIdentity,
-        Depends(get_current_identity),
+        Depends(
+            get_current_identity
+        ),
     ],
 ) -> CurrentIdentity:
-    if identity.account_type != "SUPERADMIN":
+
+    if (
+        identity.account_type
+        != "SUPERADMIN"
+    ):
         raise HTTPException(
             status_code=(
                 status.HTTP_403_FORBIDDEN
@@ -368,6 +596,7 @@ async def require_superadmin(
                 "permisos SUPERADMIN."
             ),
         )
+
 
     return identity
 
@@ -379,12 +608,17 @@ async def require_superadmin(
 async def require_partner(
     identity: Annotated[
         CurrentIdentity,
-        Depends(get_current_identity),
+        Depends(
+            get_current_identity
+        ),
     ],
 ) -> CurrentIdentity:
+
     if (
-        identity.account_type != "PARTNER"
-        or identity.socio_id is None
+        identity.account_type
+        != "PARTNER"
+        or identity.socio_id
+        is None
     ):
         raise HTTPException(
             status_code=(
@@ -396,6 +630,7 @@ async def require_partner(
             ),
         )
 
+
     return identity
 
 
@@ -406,14 +641,17 @@ async def require_partner(
 async def require_authenticated(
     identity: Annotated[
         CurrentIdentity,
-        Depends(get_current_identity),
+        Depends(
+            get_current_identity
+        ),
     ],
 ) -> CurrentIdentity:
+
     return identity
 
 
 # =========================================================
-# INFORMACIÓN DE LA SESIÓN
+# INFORMACIÓN DE SESIÓN
 # =========================================================
 
 @router.get(
@@ -423,7 +661,10 @@ async def require_authenticated(
 async def authenticated_account(
     identity: Annotated[
         CurrentIdentity,
-        Depends(get_current_identity),
+        Depends(
+            get_current_identity
+        ),
     ],
 ) -> CurrentIdentity:
+
     return identity
