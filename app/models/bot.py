@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 from datetime import datetime, timezone
 
 from sqlalchemy import (
@@ -9,34 +11,49 @@ from sqlalchemy import (
     String,
     Text,
 )
-from sqlalchemy.orm import Mapped, mapped_column, relationship
+from sqlalchemy.orm import (
+    Mapped,
+    mapped_column,
+    relationship,
+)
 
 from app.database import Base
 
 
 class BotModel(Base):
     """
-    Representa GUARDIAHEXBOT MASTER o
-    un bot perteneciente a un socio.
+    Representa GUARDIAHEXBOT MASTER
+    o un bot perteneciente a un socio.
 
     Cada bot mantiene de forma independiente:
-    - identidad;
+
+    - identidad Telegram;
+    - token cifrado;
     - versión V1-V5;
     - estado ON/OFF;
-    - token protegido;
-    - grupo y canal;
-    - grupos privados de auditoría;
+    - mantenimiento;
+    - canal y grupo;
+    - chats privados de auditoría;
+    - límites;
     - usuarios;
-    - configuración.
+    - roles;
+    - transacciones;
+    - auditorías.
     """
 
     __tablename__ = "bots"
+
+
+    # =====================================================
+    # ID
+    # =====================================================
 
     id: Mapped[int] = mapped_column(
         Integer,
         primary_key=True,
         autoincrement=True,
     )
+
 
     # =====================================================
     # PROPIETARIO
@@ -50,6 +67,7 @@ class BotModel(Base):
         nullable=True,
         index=True,
     )
+
 
     # =====================================================
     # IDENTIDAD TELEGRAM
@@ -80,12 +98,16 @@ class BotModel(Base):
         nullable=True,
     )
 
-    # El token real no debe guardarse públicamente
-    # ni escribirse directamente en el repositorio.
+
+    # =====================================================
+    # TOKEN TELEGRAM
+    # =====================================================
+
     token_encrypted: Mapped[str | None] = mapped_column(
         Text,
         nullable=True,
     )
+
 
     # =====================================================
     # TIPO / VERSIÓN
@@ -105,18 +127,20 @@ class BotModel(Base):
         index=True,
     )
 
+
     # =====================================================
     # ESTADO
     # =====================================================
 
     enabled: Mapped[bool] = mapped_column(
         Boolean,
-        default=True,
+        default=False,
         nullable=False,
         index=True,
     )
 
-    maintenance: Mapped[bool] = mapped_column(
+    maintenance_mode: Mapped[bool] = mapped_column(
+        "maintenance",
         Boolean,
         default=False,
         nullable=False,
@@ -127,8 +151,9 @@ class BotModel(Base):
         nullable=True,
     )
 
+
     # =====================================================
-    # CANAL / GRUPO PÚBLICO
+    # CANAL / GRUPO
     # =====================================================
 
     channel_url: Mapped[str | None] = mapped_column(
@@ -141,8 +166,9 @@ class BotModel(Base):
         nullable=True,
     )
 
+
     # =====================================================
-    # GRUPOS PRIVADOS DE LOGS
+    # CHATS PRIVADOS DE AUDITORÍA
     # =====================================================
 
     history_chat_id: Mapped[int | None] = mapped_column(
@@ -154,6 +180,7 @@ class BotModel(Base):
         BigInteger,
         nullable=True,
     )
+
 
     # =====================================================
     # LÍMITES
@@ -171,20 +198,27 @@ class BotModel(Base):
         nullable=False,
     )
 
+
     # =====================================================
     # FECHAS
     # =====================================================
 
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
-        default=lambda: datetime.now(timezone.utc),
+        default=lambda: datetime.now(
+            timezone.utc
+        ),
         nullable=False,
     )
 
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
-        default=lambda: datetime.now(timezone.utc),
-        onupdate=lambda: datetime.now(timezone.utc),
+        default=lambda: datetime.now(
+            timezone.utc
+        ),
+        onupdate=lambda: datetime.now(
+            timezone.utc
+        ),
         nullable=False,
     )
 
@@ -197,6 +231,7 @@ class BotModel(Base):
         DateTime(timezone=True),
         nullable=True,
     )
+
 
     # =====================================================
     # RELACIONES
@@ -235,11 +270,59 @@ class BotModel(Base):
         lazy="selectin",
     )
 
-    def __repr__(self) -> str:
+
+    # =====================================================
+    # HELPERS
+    # =====================================================
+
+    @property
+    def token_configured(
+        self,
+    ) -> bool:
+        """
+        Indica si el bot tiene un token
+        cifrado almacenado.
+        """
+
+        return bool(
+            self.token_encrypted
+            and self.token_encrypted.strip()
+        )
+
+
+    @property
+    def maintenance(
+        self,
+    ) -> bool:
+        """
+        Alias temporal para código antiguo
+        que todavía utilice bot.maintenance.
+        """
+
+        return self.maintenance_mode
+
+
+    @maintenance.setter
+    def maintenance(
+        self,
+        value: bool,
+    ) -> None:
+
+        self.maintenance_mode = bool(
+            value
+        )
+
+
+    def __repr__(
+        self,
+    ) -> str:
+
         return (
-            f"<BotModel "
+            "<BotModel "
             f"id={self.id} "
             f"username={self.username!r} "
             f"version={self.version!r} "
-            f"enabled={self.enabled}>"
+            f"enabled={self.enabled} "
+            f"maintenance_mode="
+            f"{self.maintenance_mode}>"
         )
