@@ -1,139 +1,200 @@
+from __future__ import annotations
+
 from collections.abc import Iterable
 
-from aiogram.types import InlineKeyboardMarkup
+from aiogram.types import (
+    InlineKeyboardButton,
+    InlineKeyboardMarkup,
+)
 from aiogram.utils.keyboard import InlineKeyboardBuilder
 
-
-# =========================================================
-# CATEGORÍAS MAESTRAS
-# =========================================================
-
-CATEGORY_BUTTONS: list[tuple[str, str]] = [
-    ("🪪 RENIEC", "RENIEC"),
-    ("📞 TELEFONÍA", "TELEFONIA"),
-    ("⚖️ JUSTICIA", "JUSTICIA"),
-    ("🏛 SUNAT", "SUNAT"),
-    ("🏠 SUNARP", "SUNARP"),
-    ("🚗 VEHÍCULOS", "VEHICULOS"),
-    ("📜 CERTIFICADOS", "CERTIFICADOS"),
-    ("🎓 ESTUDIOS", "ESTUDIOS"),
-    ("👥 FAMILIA", "FAMILIA"),
-    ("💰 FINANCIERO", "FINANCIERO"),
-    ("🔎 SEEKER", "SEEKER"),
-    ("🚦 MTC", "MTC"),
-    ("📑 ACTAS", "ACTAS"),
-    ("💳 VOUCHER", "VOUCHER"),
-    ("🛰 INTEL X", "INTEL_X"),
-    ("💎 VIP", "VIP"),
-    ("🌎 INTERNACIONAL", "INTERNACIONAL"),
-    ("👑 SELLER", "SELLER"),
-    ("📊 CONSULTAS MASIVAS", "CONSULTAS_MASIVAS"),
-]
+from app.bots.catalog import CATEGORY_META
 
 
 # =========================================================
-# MENÚ PRINCIPAL DE /cmds
+# CATEGORÍAS
+# =========================================================
+
+def _normalize_categories(
+    categories: Iterable[str],
+) -> list[str]:
+    """
+    Normaliza categorías y elimina cualquier valor
+    que no exista en el catálogo maestro.
+    """
+
+    allowed: list[str] = []
+    seen: set[str] = set()
+
+    for category in categories:
+        value = (
+            str(category)
+            .strip()
+            .upper()
+        )
+
+        if not value:
+            continue
+
+        if value not in CATEGORY_META:
+            continue
+
+        if value in seen:
+            continue
+
+        seen.add(value)
+        allowed.append(value)
+
+    return allowed
+
+
+# =========================================================
+# MENÚ PRINCIPAL /cmds
 # =========================================================
 
 def build_categories_keyboard(
-    enabled_categories: Iterable[str] | None = None,
+    enabled_categories: Iterable[str],
 ) -> InlineKeyboardMarkup:
     """
-    Construye los botones del menú /cmds.
+    Construye únicamente las categorías autorizadas
+    para la versión actual del bot.
 
-    Si enabled_categories es None:
-        muestra las 19 categorías.
+    Ejemplo:
 
-    Posteriormente cada versión V1-V5 enviará
-    únicamente sus categorías habilitadas.
+    V1 -> 10 categorías
+    V2 -> 13 categorías
+    V3 -> 16 categorías
+    V4 -> 18 categorías
+    V5 -> 19 categorías
+
+    No existe fallback automático a las 19 categorías.
     """
 
     builder = InlineKeyboardBuilder()
 
-    allowed = None
+    categories = _normalize_categories(
+        enabled_categories
+    )
 
-    if enabled_categories is not None:
-        allowed = {
-            category.upper()
-            for category in enabled_categories
-        }
+    for category in categories:
 
-    for text, category in CATEGORY_BUTTONS:
-        if allowed is not None and category not in allowed:
-            continue
+        meta = CATEGORY_META[
+            category
+        ]
 
-        builder.button(
-            text=text,
-            callback_data=f"category:{category}:1",
+        icon = str(
+            meta.get(
+                "icon",
+                "📁",
+            )
         )
 
-    # Dos botones por fila.
+        title = str(
+            meta.get(
+                "title",
+                category,
+            )
+        )
+
+        builder.button(
+            text=(
+                f"{icon} {title}"
+            ),
+            callback_data=(
+                f"category:{category}:1"
+            ),
+        )
+
+    # Máximo 2 categorías por fila.
     builder.adjust(2)
 
     return builder.as_markup()
 
 
 # =========================================================
-# NAVEGACIÓN POR PÁGINAS DE UNA CATEGORÍA
+# NAVEGACIÓN DE CATEGORÍA
 # =========================================================
 
 def build_category_page_keyboard(
+    *,
     category: str,
     page: int,
     total_pages: int,
 ) -> InlineKeyboardMarkup:
     """
-    Crea:
+    Navegación segura dentro de una categoría.
 
-    ⬅️ Página anterior
-    ➡️ Página siguiente
-    🏠 Regresar al menú
-
-    Los botones disponibles dependen de la
-    página actual.
+    No decide si la categoría pertenece a V1-V5.
+    Esa autorización se verifica previamente
+    en callbacks.py.
     """
 
     builder = InlineKeyboardBuilder()
 
-    category = category.upper()
+    category = (
+        str(category)
+        .strip()
+        .upper()
+    )
 
-    navigation_buttons = 0
+    page = max(
+        1,
+        int(page),
+    )
+
+    total_pages = max(
+        1,
+        int(total_pages),
+    )
+
+    # =====================================================
+    # ANTERIOR
+    # =====================================================
 
     if page > 1:
         builder.button(
-            text="⬅️",
+            text="⬅️ ANTERIOR",
             callback_data=(
-                f"category:{category}:{page - 1}"
+                f"category:"
+                f"{category}:"
+                f"{page - 1}"
             ),
         )
-        navigation_buttons += 1
+
+    # =====================================================
+    # SIGUIENTE
+    # =====================================================
 
     if page < total_pages:
         builder.button(
-            text="➡️",
+            text="SIGUIENTE ➡️",
             callback_data=(
-                f"category:{category}:{page + 1}"
+                f"category:"
+                f"{category}:"
+                f"{page + 1}"
             ),
         )
-        navigation_buttons += 1
 
-    if navigation_buttons:
-        builder.adjust(navigation_buttons)
+    builder.adjust(2)
+
+    # =====================================================
+    # VOLVER
+    # =====================================================
 
     builder.row(
-        *[
-            _inline_button(
-                text="🏠 REGRESAR AL MENÚ",
-                callback_data="menu:categories",
-            )
-        ]
+        InlineKeyboardButton(
+            text="🏠 REGRESAR AL MENÚ",
+            callback_data=(
+                "menu:categories"
+            ),
+        )
     )
 
     return builder.as_markup()
 
 
 # =========================================================
-# BOTONES DE COMPRA / CONTACTO
+# COMPRA / CONTACTO
 # =========================================================
 
 def build_buy_contacts_keyboard(
@@ -142,34 +203,45 @@ def build_buy_contacts_keyboard(
     group_url: str | None = None,
 ) -> InlineKeyboardMarkup:
     """
-    Construye los botones que aparecerán debajo de /buy.
+    Botones oficiales de compra/contacto.
 
-    founders:
-    [
-        {
-            "role": "FUNDADOR",
-            "url": "https://t.me/usuario"
-        },
-        ...
-    ]
-
-    Máximo esperado por bot:
-    4 FUNDADORES / COFUNDADORES.
+    Cada bot puede tener como máximo:
+    - 4 FUNDADOR / COFUNDADOR
+    - 1 canal
+    - 1 grupo
     """
 
     builder = InlineKeyboardBuilder()
 
-    founders = founders or []
+    founders = (
+        founders or []
+    )
+
+    founder_buttons: list[
+        InlineKeyboardButton
+    ] = []
 
     for index, founder in enumerate(
         founders[:4],
         start=1,
     ):
-        role = str(
-            founder.get("role", "FUNDADOR")
-        ).upper()
 
-        url = founder.get("url")
+        role = (
+            str(
+                founder.get(
+                    "role",
+                    "FUNDADOR",
+                )
+            )
+            .strip()
+            .upper()
+        )
+
+        url = (
+            founder.get(
+                "url"
+            )
+        )
 
         if not url:
             continue
@@ -177,31 +249,59 @@ def build_buy_contacts_keyboard(
         if role == "COFUNDADOR":
             icon = "🤝"
             title = "COFUNDADOR"
+
         else:
             icon = "👑"
             title = "FUNDADOR"
 
-        builder.button(
-            text=f"{icon} {title} {index}",
-            url=url,
-        )
-
-    # Fundadores/cofundadores, máximo dos por fila.
-    builder.adjust(2)
-
-    if channel_url:
-        builder.row(
-            _inline_button(
-                text="📢 CANAL",
-                url=channel_url,
+        founder_buttons.append(
+            InlineKeyboardButton(
+                text=(
+                    f"{icon} "
+                    f"{title} "
+                    f"{index}"
+                ),
+                url=str(url),
             )
         )
 
+    # Dos fundadores por fila.
+    for index in range(
+        0,
+        len(founder_buttons),
+        2,
+    ):
+        builder.row(
+            *founder_buttons[
+                index:index + 2
+            ]
+        )
+
+    # =====================================================
+    # CANAL
+    # =====================================================
+
+    if channel_url:
+        builder.row(
+            InlineKeyboardButton(
+                text="📢 CANAL OFICIAL",
+                url=str(
+                    channel_url
+                ),
+            )
+        )
+
+    # =====================================================
+    # GRUPO
+    # =====================================================
+
     if group_url:
         builder.row(
-            _inline_button(
-                text="👥 GRUPO",
-                url=group_url,
+            InlineKeyboardButton(
+                text="👥 GRUPO OFICIAL",
+                url=str(
+                    group_url
+                ),
             )
         )
 
@@ -209,7 +309,7 @@ def build_buy_contacts_keyboard(
 
 
 # =========================================================
-# PANEL / ACCIONES RÁPIDAS DEL BOT
+# ESTADO DEL BOT
 # =========================================================
 
 def build_bot_status_keyboard(
@@ -217,21 +317,30 @@ def build_bot_status_keyboard(
     enabled: bool,
 ) -> InlineKeyboardMarkup:
     """
-    Botón ON/OFF utilizado por el panel o
-    futuras acciones administrativas.
+    Acción rápida administrativa ON/OFF.
+
+    La autorización real debe verificarse
+    en el handler correspondiente.
     """
 
     builder = InlineKeyboardBuilder()
 
     if enabled:
+
         builder.button(
             text="🔴 APAGAR BOT",
-            callback_data=f"bot:disable:{bot_id}",
+            callback_data=(
+                f"bot:disable:{int(bot_id)}"
+            ),
         )
+
     else:
+
         builder.button(
             text="🟢 ENCENDER BOT",
-            callback_data=f"bot:enable:{bot_id}",
+            callback_data=(
+                f"bot:enable:{int(bot_id)}"
+            ),
         )
 
     builder.adjust(1)
@@ -240,28 +349,17 @@ def build_bot_status_keyboard(
 
 
 # =========================================================
-# UTILIDAD INTERNA
+# INFORMACIÓN
 # =========================================================
 
-def _inline_button(
-    text: str,
-    callback_data: str | None = None,
-    url: str | None = None,
-):
-    """
-    Crea un InlineKeyboardButton sin repetir
-    configuración en todo el archivo.
-    """
+def build_information_keyboard() -> InlineKeyboardMarkup:
+    builder = InlineKeyboardBuilder()
 
-    from aiogram.types import InlineKeyboardButton
-
-    if url:
-        return InlineKeyboardButton(
-            text=text,
-            url=url,
-        )
-
-    return InlineKeyboardButton(
-        text=text,
-        callback_data=callback_data,
+    builder.button(
+        text="ℹ️ INFORMACIÓN",
+        callback_data="action:info",
     )
+
+    builder.adjust(1)
+
+    return builder.as_markup()
