@@ -3,7 +3,6 @@ from __future__ import annotations
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from time import perf_counter
-from typing import Any
 
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -82,13 +81,10 @@ class QueryBotUnavailableError(QueryEngineError):
 @dataclass(frozen=True, slots=True)
 class ProviderRoute:
     """
-    Describe una ruta previamente autorizada.
+    Ruta previamente autorizada del proveedor.
 
-    No deben agregarse aquí URLs o endpoints
-    inventados.
-
-    Se completará únicamente cuando exista
-    documentación válida del proveedor.
+    Los endpoints reales únicamente deben añadirse
+    cuando exista documentación válida y autorización.
     """
 
     method: str
@@ -106,22 +102,16 @@ class ProviderRoute:
 # REGISTRO DE RUTAS
 # =========================================================
 
-# Se deja vacío intencionalmente.
+# Se mantiene vacío hasta disponer de documentación
+# autorizada del proveedor.
 #
-# Cuando exista documentación autorizada,
-# cada provider_key de CommandModel podrá
-# apuntar a una de estas rutas.
-#
-# Ejemplo ESTRUCTURAL:
+# Ejemplo estructural:
 #
 # "SERVICIO_EJEMPLO": ProviderRoute(
 #     method="GET",
 #     endpoint="ruta-autorizada",
 #     argument_key="query",
 # )
-#
-# No colocar endpoints reales sin comprobar
-# previamente la documentación.
 
 AUTHORIZED_PROVIDER_ROUTES: dict[
     str,
@@ -148,7 +138,7 @@ class EffectiveCommand:
 
 
 # =========================================================
-# RESULTADO DEL MOTOR
+# RESULTADO
 # =========================================================
 
 @dataclass(slots=True)
@@ -170,7 +160,7 @@ class QueryExecutionResult:
 
 
 # =========================================================
-# MOTOR
+# MOTOR CENTRAL
 # =========================================================
 
 class QueryEngine:
@@ -179,19 +169,19 @@ class QueryEngine:
 
     Flujo:
 
-    Telegram CMD
+    Telegram
         ↓
     validar bot
         ↓
-    validar CommandModel
+    validar CMD
         ↓
     validar versión
         ↓
-    aplicar BotCommandModel
+    aplicar configuración del bot
         ↓
     validar usuario
         ↓
-    validar rol
+    validar permisos
         ↓
     validar límite diario
         ↓
@@ -199,19 +189,34 @@ class QueryEngine:
         ↓
     comprobar proveedor
         ↓
-    comprobar créditos
+    comprobar saldo
         ↓
-    cobrar
+    cobrar créditos
         ↓
     llamar proveedor
         ↓
-    datos / sin resultados / error
-        ↓
-    reembolso si corresponde
+    resultado / sin resultados / error
         ↓
     estadísticas
         ↓
     auditoría
+
+    REGLA DE COBRO:
+
+    - entrada inválida:
+      NO cobra.
+
+    - proveedor no configurado:
+      NO cobra.
+
+    - error técnico del proveedor:
+      reembolsa.
+
+    - resultado válido:
+      cobra.
+
+    - consulta válida sin resultados:
+      TAMBIÉN cobra.
     """
 
     # =====================================================
@@ -238,7 +243,6 @@ class QueryEngine:
             value = f"/{value}"
 
         return value
-
 
     # =====================================================
     # NORMALIZAR VERSIÓN
@@ -268,7 +272,6 @@ class QueryEngine:
 
         return value
 
-
     # =====================================================
     # NORMALIZAR ROL
     # =====================================================
@@ -283,7 +286,6 @@ class QueryEngine:
             .strip()
             .upper()
         )
-
 
     # =====================================================
     # OBTENER BOT
@@ -325,9 +327,8 @@ class QueryEngine:
 
         return bot
 
-
     # =====================================================
-    # CMD EFECTIVO
+    # RESOLVER CMD
     # =====================================================
 
     async def resolve_command(
@@ -363,10 +364,10 @@ class QueryEngine:
                 func.lower(
                     CommandModel.command
                 ).in_(
-                    {
+                    (
                         normalized_command,
                         command_without_slash,
-                    }
+                    )
                 )
             )
         )
@@ -381,7 +382,7 @@ class QueryEngine:
             )
 
         # =================================================
-        # GLOBAL + VERSIÓN
+        # ESTADO GLOBAL + VERSIÓN
         # =================================================
 
         base_enabled = (
@@ -414,7 +415,9 @@ class QueryEngine:
 
         if config is None:
 
-            enabled = base_enabled
+            enabled = (
+                base_enabled
+            )
 
             try:
                 price = max(
@@ -440,7 +443,7 @@ class QueryEngine:
             )
 
         # =================================================
-        # CON OVERRIDE
+        # CON OVERRIDE DEL BOT
         # =================================================
 
         else:
@@ -491,7 +494,6 @@ class QueryEngine:
             ),
         )
 
-
     # =====================================================
     # BUSCAR USUARIO
     # =====================================================
@@ -518,7 +520,6 @@ class QueryEngine:
         return (
             result.scalar_one_or_none()
         )
-
 
     # =====================================================
     # LÍMITE DIARIO
@@ -593,9 +594,8 @@ class QueryEngine:
                 "diario de consultas."
             )
 
-
     # =====================================================
-    # RUTA AUTORIZADA
+    # RESOLVER RUTA AUTORIZADA
     # =====================================================
 
     @staticmethod
@@ -632,7 +632,6 @@ class QueryEngine:
             )
 
         return route
-
 
     # =====================================================
     # VALIDAR ARGUMENTO
@@ -687,7 +686,7 @@ class QueryEngine:
                 "únicamente números."
             )
 
-        # Caracteres de control.
+        # No aceptar caracteres de control.
         if any(
             ord(character) < 32
             for character
@@ -700,7 +699,6 @@ class QueryEngine:
             )
 
         return value
-
 
     # =====================================================
     # COMPROBAR PROVEEDOR
@@ -724,7 +722,6 @@ class QueryEngine:
                 "El servicio externo todavía "
                 "no se encuentra disponible."
             )
-
 
     # =====================================================
     # PETICIÓN AL PROVEEDOR
@@ -775,9 +772,8 @@ class QueryEngine:
             "no autorizado."
         )
 
-
     # =====================================================
-    # AUDITORÍA DE ERROR DE PROVEEDOR
+    # AUDITORÍA ERROR PROVEEDOR
     # =====================================================
 
     async def _audit_provider_error(
@@ -850,9 +846,8 @@ class QueryEngine:
             ),
         )
 
-
     # =====================================================
-    # EJECUTAR
+    # EJECUTAR CONSULTA
     # =====================================================
 
     async def execute(
@@ -869,7 +864,9 @@ class QueryEngine:
         request_id: str | None = None,
     ) -> QueryExecutionResult:
 
-        started = perf_counter()
+        started = (
+            perf_counter()
+        )
 
         role = (
             self._normalize_role(
@@ -878,7 +875,7 @@ class QueryEngine:
         )
 
         # =================================================
-        # BOT REAL
+        # BOT
         # =================================================
 
         bot = await self._get_bot(
@@ -886,15 +883,14 @@ class QueryEngine:
             bot_id=bot_id,
         )
 
-        # La versión de PostgreSQL es la autoridad.
+        # PostgreSQL es la autoridad para la versión.
         database_version = (
             self._normalize_version(
                 bot.version
             )
         )
 
-        # Si middleware trae otra versión,
-        # utilizamos igualmente PostgreSQL.
+        # Se mantiene por compatibilidad con middleware.
         _ = bot_version
 
         # =================================================
@@ -950,9 +946,8 @@ class QueryEngine:
                     "habilitada."
                 )
 
-        # El sistema actual de créditos,
-        # estadísticas y auditoría requiere
-        # usuario persistido.
+        # Créditos y estadísticas necesitan
+        # un UserModel persistido.
         if user is None:
 
             raise QueryAccountRequiredError(
@@ -961,7 +956,7 @@ class QueryEngine:
             )
 
         # =================================================
-        # PERMISO
+        # PERMISOS
         # =================================================
 
         if (
@@ -1000,9 +995,7 @@ class QueryEngine:
         # =================================================
         # VALIDAR ENTRADA
         #
-        # Si falla aquí:
-        # NO API
-        # NO COBRO
+        # ERROR AQUÍ = NO API + NO COBRO
         # =================================================
 
         validated_argument = (
@@ -1013,7 +1006,9 @@ class QueryEngine:
         )
 
         # =================================================
-        # COMPROBAR PROVEEDOR ANTES DE COBRAR
+        # PROVEEDOR DISPONIBLE
+        #
+        # SE COMPRUEBA ANTES DE COBRAR
         # =================================================
 
         await self._check_provider_ready(
@@ -1040,7 +1035,7 @@ class QueryEngine:
             )
 
         # =================================================
-        # COBRO
+        # COBRAR
         # =================================================
 
         charged = False
@@ -1064,7 +1059,7 @@ class QueryEngine:
             charged = True
 
         # =================================================
-        # PROVEEDOR
+        # LLAMAR PROVEEDOR
         # =================================================
 
         provider_result = (
@@ -1082,7 +1077,7 @@ class QueryEngine:
         # =================================================
         # ERROR TÉCNICO
         #
-        # REEMBOLSO
+        # SI HUBO COBRO → REEMBOLSO
         # =================================================
 
         if not provider_result.success:
@@ -1158,6 +1153,16 @@ class QueryEngine:
 
         # =================================================
         # COSTO FINAL
+        #
+        # IMPORTANTE:
+        #
+        # Si la consulta fue válida y el proveedor
+        # respondió correctamente, el costo se mantiene.
+        #
+        # Esto incluye:
+        #
+        # - resultados encontrados;
+        # - Sin Resultados.
         # =================================================
 
         final_cost = (
@@ -1165,44 +1170,7 @@ class QueryEngine:
         )
 
         # =================================================
-        # SIN RESULTADOS
-        #
-        # Por defecto charge_on_no_results=True.
-        # Si un CMD específico está configurado
-        # en False, se reembolsa.
-        # =================================================
-
-        if (
-            provider_result.no_results
-            and not effective.model
-            .charge_on_no_results
-            and charged
-            and effective.price > 0
-        ):
-
-            await credit_service.refund_query(
-                session,
-
-                bot_id=bot_id,
-
-                user_id=user.id,
-
-                amount=(
-                    effective.price
-                ),
-
-                command=command,
-
-                reason=(
-                    "CMD configurado para "
-                    "no cobrar sin resultados."
-                ),
-            )
-
-            final_cost = 0
-
-        # =================================================
-        # ESTADÍSTICAS DEL USUARIO
+        # ESTADÍSTICAS
         # =================================================
 
         await session.refresh(
@@ -1217,8 +1185,8 @@ class QueryEngine:
             + 1
         )
 
-        # CAMPO CORRECTO DEL MODELO:
-        user.last_query = (
+        # Campo real existente en UserModel.
+        user.last_query_at = (
             datetime.now(
                 timezone.utc
             )
