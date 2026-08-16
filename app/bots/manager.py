@@ -1,52 +1,124 @@
+from __future__ import annotations
+
 import asyncio
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Dict
 
 from aiogram import Bot, Dispatcher
-from aiogram.enums import ParseMode
 from aiogram.client.default import DefaultBotProperties
-
-from app.config import settings
+from aiogram.enums import ParseMode
 
 
 @dataclass
 class ManagedBot:
+    """
+    Bot Telegram cargado en memoria.
+
+    El token existe en memoria únicamente
+    mientras el proceso necesita operar el bot.
+    Nunca debe mostrarse en logs o respuestas.
+    """
+
     bot_id: int
-    token: str
-    username: str | None
-    is_master: bool
-    enabled: bool
-    bot: Bot
-    dispatcher: Dispatcher
-    task: asyncio.Task | None = None
+
+    token: str = field(
+        repr=False,
+    )
+
+    username: str | None = None
+    is_master: bool = False
+    enabled: bool = False
+
+    bot: Bot | None = None
+    dispatcher: Dispatcher | None = None
+
+    task: asyncio.Task | None = field(
+        default=None,
+        repr=False,
+    )
+
+    last_error: str | None = None
 
 
 class BotManager:
     """
-    Administrador central de GUARDIAHEXBOT y
-    todos los bots de socios.
+    Administrador central de GUARDIAHEXBOT
+    y todos los bots pertenecientes a socios.
 
-    Permite:
-    - Registrar bots.
-    - Encender bots.
-    - Apagar bots.
-    - Reiniciar bots.
-    - Consultar estado.
-    - Mantener múltiples tokens dentro de
-      un solo motor.
+    Responsabilidades:
+
+    - registrar bots;
+    - validar el token con Telegram;
+    - iniciar polling;
+    - detener polling;
+    - reiniciar bots;
+    - controlar concurrencia;
+    - consultar estado;
+    - cerrar sesiones correctamente.
     """
 
     def __init__(self) -> None:
-        self._bots: Dict[int, ManagedBot] = {}
+        self._bots: Dict[
+            int,
+            ManagedBot,
+        ] = {}
 
-    def exists(self, bot_id: int) -> bool:
+        self._locks: Dict[
+            int,
+            asyncio.Lock,
+        ] = {}
+
+
+    # =====================================================
+    # CONSULTAS
+    # =====================================================
+
+    def exists(
+        self,
+        bot_id: int,
+    ) -> bool:
         return bot_id in self._bots
 
-    def get(self, bot_id: int) -> ManagedBot | None:
-        return self._bots.get(bot_id)
 
-    def all(self) -> list[ManagedBot]:
-        return list(self._bots.values())
+    def get(
+        self,
+        bot_id: int,
+    ) -> ManagedBot | None:
+        return self._bots.get(
+            bot_id
+        )
+
+
+    def all(
+        self,
+    ) -> list[ManagedBot]:
+        return list(
+            self._bots.values()
+        )
+
+
+    def _get_lock(
+        self,
+        bot_id: int,
+    ) -> asyncio.Lock:
+
+        lock = self._locks.get(
+            bot_id
+        )
+
+        if lock is None:
+            lock = asyncio.Lock()
+
+            self._locks[
+                bot_id
+            ] = lock
+
+        return lock
+
+
+    # =====================================================
+    # REGISTRAR
+    # =====================================================
 
     async def register_bot(
         self,
@@ -54,22 +126,33 @@ class BotManager:
         token: str,
         username: str | None = None,
         is_master: bool = False,
-        enabled: bool = True,
+        enabled: bool = False,
     ) -> ManagedBot:
         """
-        Registra un bot dentro del motor central.
+        Registra el bot dentro del proceso.
 
-        No inicia polling automáticamente.
+        Todavía no inicia polling.
         """
 
-        if not token:
-            raise ValueError("El token del bot no puede estar vacío.")
+        token = token.strip()
 
-        if self.exists(bot_id):
+        if not token:
             raise ValueError(
-                f"El bot con ID {bot_id} ya está registrado."
+                "El token del bot "
+                "no puede estar vacío."
             )
 
+        if self.exists(
+            bot_id
+        ):
+            raise ValueError(
+                f"El bot con ID {bot_id} "
+                "ya está registrado."
+            )
+
+        # El propio constructor de Aiogram
+        # también valida la estructura básica
+        # del token.
         bot = Bot(
             token=token,
             default=DefaultBotProperties(
@@ -89,146 +172,447 @@ class BotManager:
             dispatcher=dispatcher,
         )
 
-        self._bots[bot_id] = managed_bot
+        self._bots[
+            bot_id
+        ] = managed_bot
+
+        self._get_lock(
+            bot_id
+        )
 
         return managed_bot
 
-    async def start_bot(self, bot_id: int) -> bool:
+
+    # =====================================================
+    # CALLBACK DE TAREA
+    # =====================================================
+
+    def _polling_finished(
+        self,
+        bot_id: int,
+        task: asyncio.Task,
+    ) -> None:
         """
-        Enciende un bot registrado.
+        Registra internamente si polling terminó
+        por un error inesperado.
+
+        Nunca escribe el token en logs.
         """
 
-        managed_bot = self.get(bot_id)
-
-        if not managed_bot:
-            raise ValueError("Bot no registrado.")
-
-        if not managed_bot.enabled:
-            return False
-
-        if managed_bot.task and not managed_bot.task.done():
-            return True
-
-        managed_bot.task = asyncio.create_task(
-            managed_bot.dispatcher.start_polling(
-                managed_bot.bot,
-                handle_signals=False,
-            )
+        managed = self.get(
+            bot_id
         )
 
-        return True
+        if managed is None:
+            return
 
-    async def stop_bot(self, bot_id: int) -> bool:
+        if task.cancelled():
+            return
+
+        try:
+            error = task.exception()
+
+        except asyncio.CancelledError:
+            return
+
+        if error is not None:
+            managed.last_error = (
+                f"{type(error).__name__}: "
+                f"{error}"
+            )
+
+
+    # =====================================================
+    # ENCENDER
+    # =====================================================
+
+    async def start_bot(
+        self,
+        bot_id: int,
+    ) -> bool:
         """
-        Apaga un bot sin eliminarlo del sistema.
+        Valida el token e inicia polling.
+
+        Si ya está ONLINE, no crea otro polling.
         """
 
-        managed_bot = self.get(bot_id)
+        managed = self.get(
+            bot_id
+        )
 
-        if not managed_bot:
-            raise ValueError("Bot no registrado.")
+        if managed is None:
+            raise ValueError(
+                "Bot no registrado."
+            )
 
-        if managed_bot.task:
-            managed_bot.task.cancel()
+        if not managed.enabled:
+            return False
+
+        if (
+            managed.bot is None
+            or managed.dispatcher is None
+        ):
+            raise RuntimeError(
+                "Runtime del bot incompleto."
+            )
+
+        lock = self._get_lock(
+            bot_id
+        )
+
+        async with lock:
+
+            # Evitar doble polling.
+            if (
+                managed.task is not None
+                and not managed.task.done()
+            ):
+                return True
+
+            managed.last_error = None
+
+            # ==========================================
+            # VALIDAR TOKEN CONTRA TELEGRAM
+            # ==========================================
 
             try:
-                await managed_bot.task
-            except asyncio.CancelledError:
-                pass
+                bot_info = await managed.bot.get_me()
 
-            managed_bot.task = None
+            except Exception as exc:
+                managed.last_error = (
+                    f"{type(exc).__name__}: "
+                    f"{exc}"
+                )
 
-        await managed_bot.bot.session.close()
+                raise RuntimeError(
+                    "Telegram rechazó el token "
+                    "o no fue posible conectar "
+                    "con Telegram."
+                ) from exc
 
-        return True
+            # Guardamos username obtenido
+            # directamente desde Telegram.
+            if bot_info.username:
+                managed.username = (
+                    bot_info.username.lower()
+                )
 
-    async def restart_bot(self, bot_id: int) -> bool:
+            # ==========================================
+            # POLLING
+            # ==========================================
+
+            task = asyncio.create_task(
+                managed.dispatcher.start_polling(
+                    managed.bot,
+                    handle_signals=False,
+
+                    # Importante:
+                    # dejamos la sesión abierta para
+                    # permitir OFF -> ON sin crear
+                    # nuevamente el objeto Bot.
+                    close_bot_session=False,
+                ),
+                name=(
+                    f"guardiahex-bot-"
+                    f"{bot_id}"
+                ),
+            )
+
+            managed.task = task
+
+            task.add_done_callback(
+                lambda completed_task: (
+                    self._polling_finished(
+                        bot_id,
+                        completed_task,
+                    )
+                )
+            )
+
+            # Dar oportunidad a polling de iniciar.
+            await asyncio.sleep(0)
+
+            if task.done():
+
+                if task.cancelled():
+                    managed.task = None
+
+                    raise RuntimeError(
+                        "El polling fue cancelado "
+                        "durante el inicio."
+                    )
+
+                error = task.exception()
+
+                managed.task = None
+
+                if error is not None:
+                    managed.last_error = (
+                        f"{type(error).__name__}: "
+                        f"{error}"
+                    )
+
+                    raise RuntimeError(
+                        "El bot no pudo iniciar "
+                        "el polling."
+                    ) from error
+
+                raise RuntimeError(
+                    "El polling terminó "
+                    "inesperadamente."
+                )
+
+            return True
+
+
+    # =====================================================
+    # APAGAR
+    # =====================================================
+
+    async def stop_bot(
+        self,
+        bot_id: int,
+    ) -> bool:
         """
-        Reinicia un bot.
+        Detiene polling sin destruir
+        el bot registrado.
+
+        Esto permite encenderlo otra vez.
         """
 
-        await self.stop_bot(bot_id)
-
-        managed_bot = self.get(bot_id)
-
-        if not managed_bot:
-            return False
-
-        managed_bot.bot = Bot(
-            token=managed_bot.token,
-            default=DefaultBotProperties(
-                parse_mode=ParseMode.HTML,
-            ),
+        managed = self.get(
+            bot_id
         )
 
-        return await self.start_bot(bot_id)
+        if managed is None:
+            raise ValueError(
+                "Bot no registrado."
+            )
+
+        lock = self._get_lock(
+            bot_id
+        )
+
+        async with lock:
+
+            task = managed.task
+
+            if (
+                task is not None
+                and not task.done()
+            ):
+                task.cancel()
+
+                try:
+                    await task
+
+                except asyncio.CancelledError:
+                    pass
+
+                except Exception as exc:
+                    managed.last_error = (
+                        f"{type(exc).__name__}: "
+                        f"{exc}"
+                    )
+
+            managed.task = None
+
+            # No cerramos aquí bot.session.
+            # Se mantiene disponible para
+            # volver a encender este bot.
+
+            return True
+
+
+    # =====================================================
+    # REINICIAR
+    # =====================================================
+
+    async def restart_bot(
+        self,
+        bot_id: int,
+    ) -> bool:
+        """
+        Reinicia un bot registrado.
+        """
+
+        managed = self.get(
+            bot_id
+        )
+
+        if managed is None:
+            raise ValueError(
+                "Bot no registrado."
+            )
+
+        await self.stop_bot(
+            bot_id
+        )
+
+        managed.enabled = True
+
+        return await self.start_bot(
+            bot_id
+        )
+
+
+    # =====================================================
+    # CAMBIAR ON / OFF
+    # =====================================================
 
     async def set_enabled(
         self,
         bot_id: int,
         enabled: bool,
     ) -> bool:
-        """
-        Cambia el estado lógico ON/OFF del bot.
-        """
 
-        managed_bot = self.get(bot_id)
+        managed = self.get(
+            bot_id
+        )
 
-        if not managed_bot:
-            raise ValueError("Bot no registrado.")
+        if managed is None:
+            raise ValueError(
+                "Bot no registrado."
+            )
 
-        managed_bot.enabled = enabled
+        managed.enabled = bool(
+            enabled
+        )
 
         if enabled:
-            return await self.start_bot(bot_id)
+            return await self.start_bot(
+                bot_id
+            )
 
-        return await self.stop_bot(bot_id)
+        return await self.stop_bot(
+            bot_id
+        )
 
-    async def unregister_bot(self, bot_id: int) -> bool:
+
+    # =====================================================
+    # ELIMINAR DEL RUNTIME
+    # =====================================================
+
+    async def unregister_bot(
+        self,
+        bot_id: int,
+    ) -> bool:
         """
-        Elimina un bot del administrador en memoria.
+        Apaga, cierra la sesión Telegram
+        y elimina el bot de memoria.
         """
 
-        managed_bot = self.get(bot_id)
+        managed = self.get(
+            bot_id
+        )
 
-        if not managed_bot:
+        if managed is None:
             return False
 
-        await self.stop_bot(bot_id)
+        await self.stop_bot(
+            bot_id
+        )
 
-        self._bots.pop(bot_id, None)
+        if managed.bot is not None:
 
-        return True
-
-    async def shutdown_all(self) -> None:
-        """
-        Apaga todos los bots de forma segura.
-        """
-
-        bot_ids = list(self._bots.keys())
-
-        for bot_id in bot_ids:
             try:
-                await self.stop_bot(bot_id)
+                await managed.bot.session.close()
+
             except Exception:
                 pass
 
-    def status(self, bot_id: int) -> str:
-        managed_bot = self.get(bot_id)
+        self._bots.pop(
+            bot_id,
+            None,
+        )
 
-        if not managed_bot:
+        self._locks.pop(
+            bot_id,
+            None,
+        )
+
+        return True
+
+
+    # =====================================================
+    # ESTADO
+    # =====================================================
+
+    def status(
+        self,
+        bot_id: int,
+    ) -> str:
+
+        managed = self.get(
+            bot_id
+        )
+
+        if managed is None:
             return "NOT_REGISTERED"
 
-        if not managed_bot.enabled:
+        if not managed.enabled:
             return "OFFLINE"
 
+        task = managed.task
+
         if (
-            managed_bot.task is not None
-            and not managed_bot.task.done()
+            task is not None
+            and not task.done()
         ):
             return "ONLINE"
 
+        if managed.last_error:
+            return "ERROR"
+
         return "STOPPED"
+
+
+    # =====================================================
+    # ERROR DEL RUNTIME
+    # =====================================================
+
+    def last_error(
+        self,
+        bot_id: int,
+    ) -> str | None:
+
+        managed = self.get(
+            bot_id
+        )
+
+        if managed is None:
+            return None
+
+        return managed.last_error
+
+
+    # =====================================================
+    # APAGAR TODOS
+    # =====================================================
+
+    async def shutdown_all(
+        self,
+    ) -> None:
+        """
+        Cierra todos los bots y todas
+        las sesiones de Telegram.
+        """
+
+        bot_ids = list(
+            self._bots.keys()
+        )
+
+        for bot_id in bot_ids:
+
+            try:
+                await self.unregister_bot(
+                    bot_id
+                )
+
+            except Exception:
+                # El cierre de un bot no debe
+                # impedir cerrar los demás.
+                continue
 
 
 bot_manager = BotManager()
