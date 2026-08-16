@@ -2,6 +2,7 @@ from datetime import datetime, timezone
 from decimal import Decimal
 
 from sqlalchemy import (
+    BigInteger,
     Boolean,
     DateTime,
     ForeignKey,
@@ -152,7 +153,7 @@ class PlanModel(Base):
     )
 
     # =====================================================
-    # VERSIONES DEL BOT
+    # VERSIONES
     # =====================================================
 
     available_versions: Mapped[list[str]] = mapped_column(
@@ -210,20 +211,34 @@ class PlanModel(Base):
     @property
     def total_credits(self) -> int:
         return (
-            self.credits
-            + self.bonus_credits
+            int(self.credits or 0)
+            + int(self.bonus_credits or 0)
         )
 
     def available_for_version(
         self,
         version: str,
     ) -> bool:
+        """
+        Si available_versions está vacío,
+        el plan puede utilizarse en cualquier versión.
+        """
+
         if not self.available_versions:
             return True
 
-        return version.upper() in {
-            value.upper()
-            for value in self.available_versions
+        normalized_version = (
+            str(version or "")
+            .strip()
+            .upper()
+        )
+
+        return normalized_version in {
+            str(value)
+            .strip()
+            .upper()
+            for value
+            in self.available_versions
         }
 
     def __repr__(self) -> str:
@@ -241,11 +256,22 @@ class SubscriptionModel(Base):
     Historial de suscripciones por días.
 
     Los créditos y los días permanecen separados:
-    /cred administra créditos.
-    /sub administra suscripciones.
+
+    /cred
+        administra créditos.
+
+    /sub
+        administra suscripciones.
+
+    Renovar una suscripción no debe reiniciar
+    ni modificar los créditos del usuario.
     """
 
     __tablename__ = "subscriptions"
+
+    # =====================================================
+    # IDENTIFICACIÓN
+    # =====================================================
 
     id: Mapped[int] = mapped_column(
         Integer,
@@ -271,6 +297,10 @@ class SubscriptionModel(Base):
         index=True,
     )
 
+    # =====================================================
+    # PLAN
+    # =====================================================
+
     plan_name: Mapped[str] = mapped_column(
         String(50),
         nullable=False,
@@ -281,6 +311,10 @@ class SubscriptionModel(Base):
         Integer,
         nullable=False,
     )
+
+    # =====================================================
+    # PERÍODO
+    # =====================================================
 
     starts_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
@@ -293,7 +327,12 @@ class SubscriptionModel(Base):
         index=True,
     )
 
+    # =====================================================
+    # QUIÉN ACTIVÓ LA SUSCRIPCIÓN
+    # =====================================================
+
     activated_by_telegram_id: Mapped[int | None] = mapped_column(
+        BigInteger,
         nullable=True,
         index=True,
     )
@@ -303,6 +342,10 @@ class SubscriptionModel(Base):
         nullable=True,
     )
 
+    # =====================================================
+    # ESTADO
+    # =====================================================
+
     is_active: Mapped[bool] = mapped_column(
         Boolean,
         default=True,
@@ -310,11 +353,19 @@ class SubscriptionModel(Base):
         index=True,
     )
 
+    # =====================================================
+    # FECHA DE CREACIÓN
+    # =====================================================
+
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
         default=lambda: datetime.now(timezone.utc),
         nullable=False,
     )
+
+    # =====================================================
+    # RELACIONES
+    # =====================================================
 
     bot = relationship(
         "BotModel",
@@ -324,10 +375,31 @@ class SubscriptionModel(Base):
         "UserModel",
     )
 
+    # =====================================================
+    # UTILIDADES
+    # =====================================================
+
+    @property
+    def is_expired(self) -> bool:
+        """
+        True cuando la suscripción ya venció.
+        """
+
+        now = datetime.now(
+            timezone.utc
+        )
+
+        return (
+            self.expires_at
+            <= now
+        )
+
     def __repr__(self) -> str:
         return (
             f"<SubscriptionModel "
             f"id={self.id} "
+            f"bot_id={self.bot_id} "
             f"user_id={self.user_id} "
-            f"plan={self.plan_name!r}>"
+            f"plan={self.plan_name!r} "
+            f"active={self.is_active}>"
         )
