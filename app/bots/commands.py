@@ -16,6 +16,9 @@ from app.bots.catalog import (
     get_commands_for_version,
     get_enabled_categories,
 )
+from app.bots.keyboards import (
+    build_categories_keyboard,
+)
 from app.bots.permissions import (
     Role,
     can_grant_credits,
@@ -148,13 +151,24 @@ def _is_global_superadmin(
     telegram_id: int,
     is_master_bot: bool,
 ) -> bool:
+    """
+    SUPERADMIN es global.
+
+    Puede administrar GUARDIAHEXBOT MASTER
+    y también los bots de socios.
+
+    is_master_bot se conserva como argumento
+    por compatibilidad con los handlers.
+    """
+
     configured_id = (
         _superadmin_telegram_id()
     )
 
+    _ = is_master_bot
+
     return bool(
-        is_master_bot
-        and configured_id is not None
+        configured_id is not None
         and telegram_id == configured_id
     )
 
@@ -215,6 +229,7 @@ async def _ensure_user_role(
     )
 
     if role is None:
+
         role = RoleModel(
             bot_id=bot_id,
             user_id=user_id,
@@ -223,9 +238,12 @@ async def _ensure_user_role(
             assigned_by_role="SYSTEM",
         )
 
-        session.add(role)
+        session.add(
+            role
+        )
 
     elif not role.is_active:
+
         role.is_active = True
         role.revoked_at = None
 
@@ -247,9 +265,10 @@ async def _register_user(
 ]:
     """
     Retorna:
-    - usuario
-    - fue creado
-    - recibió bono
+
+    - usuario;
+    - fue creado;
+    - recibió bono.
     """
 
     now = datetime.now(
@@ -271,6 +290,7 @@ async def _register_user(
     # =====================================================
 
     if user is None:
+
         user = UserModel(
             bot_id=bot_id,
             telegram_id=telegram_id,
@@ -286,7 +306,9 @@ async def _register_user(
             last_seen_at=now,
         )
 
-        session.add(user)
+        session.add(
+            user
+        )
 
         await session.flush()
 
@@ -297,6 +319,7 @@ async def _register_user(
     # =====================================================
 
     else:
+
         user.username = username
         user.first_name = first_name
         user.last_name = last_name
@@ -321,6 +344,7 @@ async def _register_user(
 
         previous_balance = int(
             user.credits
+            or 0
         )
 
         user.credits = (
@@ -333,9 +357,7 @@ async def _register_user(
         transaction = TransactionModel(
             bot_id=bot_id,
 
-            transaction_type=(
-                "WELCOME_BONUS"
-            ),
+            transaction_type="WELCOME_BONUS",
 
             status="COMPLETED",
 
@@ -440,6 +462,7 @@ def _highest_role(
         )
 
         if level > best_level:
+
             best = normalized.value
             best_level = level
 
@@ -455,6 +478,10 @@ async def _effective_role(
     user: UserModel | None = None,
 ) -> str:
 
+    # =====================================================
+    # SUPERADMIN GLOBAL
+    # =====================================================
+
     if _is_global_superadmin(
         telegram_id=telegram_id,
         is_master_bot=is_master_bot,
@@ -462,6 +489,7 @@ async def _effective_role(
         return "SUPERADMIN"
 
     if user is None:
+
         user = await _get_user(
             session,
             bot_id=bot_id,
@@ -560,9 +588,7 @@ def get_commands_router() -> Router:
         bot_version: str,
     ) -> None:
 
-        tg_user = (
-            message.from_user
-        )
+        tg_user = message.from_user
 
         if tg_user is None:
             return
@@ -577,10 +603,8 @@ def get_commands_router() -> Router:
 
             if user is not None:
 
-                user.last_seen_at = (
-                    datetime.now(
-                        timezone.utc
-                    )
+                user.last_seen_at = datetime.now(
+                    timezone.utc
                 )
 
                 user.username = (
@@ -654,14 +678,13 @@ def get_commands_router() -> Router:
         internal_bot_id: int,
     ) -> None:
 
-        tg_user = (
-            message.from_user
-        )
+        tg_user = message.from_user
 
         if tg_user is None:
             return
 
         try:
+
             async with AsyncSessionLocal() as session:
 
                 (
@@ -671,25 +694,15 @@ def get_commands_router() -> Router:
                 ) = await _register_user(
                     session,
 
-                    bot_id=(
-                        internal_bot_id
-                    ),
+                    bot_id=internal_bot_id,
 
-                    telegram_id=(
-                        tg_user.id
-                    ),
+                    telegram_id=tg_user.id,
 
-                    username=(
-                        tg_user.username
-                    ),
+                    username=tg_user.username,
 
-                    first_name=(
-                        tg_user.first_name
-                    ),
+                    first_name=tg_user.first_name,
 
-                    last_name=(
-                        tg_user.last_name
-                    ),
+                    last_name=tg_user.last_name,
                 )
 
         except IntegrityError:
@@ -713,21 +726,25 @@ def get_commands_router() -> Router:
             return
 
         if created:
+
             status_text = (
                 "Cuenta creada correctamente ✅"
             )
 
         else:
+
             status_text = (
                 "Tu cuenta ya estaba registrada ✅"
             )
 
         if bonus_granted:
+
             bonus_text = (
                 f"+{WELCOME_BONUS} créditos 🎁"
             )
 
         else:
+
             bonus_text = (
                 "Bono de registro ya utilizado"
             )
@@ -798,6 +815,7 @@ def get_commands_router() -> Router:
                 command.category
                 in command_counts
             ):
+
                 command_counts[
                     command.category
                 ] += 1
@@ -850,14 +868,21 @@ def get_commands_router() -> Router:
                 "",
                 "━━━━━━━━━━━━━━━━━━━━━━━━━━━━",
                 (
-                    "Cada categoría muestra "
-                    "máximo 3 CMD por página."
+                    "Selecciona una categoría "
+                    "desde los botones."
                 ),
             ]
         )
 
         await message.answer(
-            "\n".join(lines)
+            "\n".join(
+                lines
+            ),
+            reply_markup=(
+                build_categories_keyboard(
+                    categories
+                )
+            ),
         )
 
     # =====================================================
@@ -874,9 +899,7 @@ def get_commands_router() -> Router:
         is_master_bot: bool,
     ) -> None:
 
-        tg_user = (
-            message.from_user
-        )
+        tg_user = message.from_user
 
         if tg_user is None:
             return
@@ -902,25 +925,17 @@ def get_commands_router() -> Router:
             role = await _effective_role(
                 session,
 
-                bot_id=(
-                    internal_bot_id
-                ),
+                bot_id=internal_bot_id,
 
-                telegram_id=(
-                    tg_user.id
-                ),
+                telegram_id=tg_user.id,
 
-                is_master_bot=(
-                    is_master_bot
-                ),
+                is_master_bot=is_master_bot,
 
                 user=user,
             )
 
-            user.last_seen_at = (
-                datetime.now(
-                    timezone.utc
-                )
+            user.last_seen_at = datetime.now(
+                timezone.utc
             )
 
             try:
@@ -930,21 +945,26 @@ def get_commands_router() -> Router:
                 await session.rollback()
 
             if user.is_banned:
+
                 state = "BLOQUEADO ⛔"
 
             elif not user.is_active:
+
                 state = "INACTIVO ⚠️"
 
             else:
+
                 state = "ACTIVO ✅"
 
             if (
                 user.plan_expires_at
                 is None
             ):
+
                 expires = "Sin vencimiento"
 
             else:
+
                 expires = (
                     user.plan_expires_at
                     .strftime(
@@ -1041,9 +1061,7 @@ def get_commands_router() -> Router:
         is_master_bot: bool,
     ) -> None:
 
-        tg_user = (
-            message.from_user
-        )
+        tg_user = message.from_user
 
         if tg_user is None:
             return
@@ -1077,6 +1095,7 @@ def get_commands_router() -> Router:
             target_telegram_id is None
             or amount is None
         ):
+
             await message.answer(
                 "⚠️ ID o cantidad inválida."
             )
@@ -1089,25 +1108,16 @@ def get_commands_router() -> Router:
                 await _require_registered_actor(
                     session,
 
-                    bot_id=(
-                        internal_bot_id
-                    ),
+                    bot_id=internal_bot_id,
 
-                    telegram_id=(
-                        tg_user.id
-                    ),
+                    telegram_id=tg_user.id,
                 )
             )
 
             global_superadmin = (
                 _is_global_superadmin(
-                    telegram_id=(
-                        tg_user.id
-                    ),
-
-                    is_master_bot=(
-                        is_master_bot
-                    ),
+                    telegram_id=tg_user.id,
+                    is_master_bot=is_master_bot,
                 )
             )
 
@@ -1115,6 +1125,7 @@ def get_commands_router() -> Router:
                 actor is None
                 and not global_superadmin
             ):
+
                 await message.answer(
                     "⚠️ Primero utiliza /register."
                 )
@@ -1128,6 +1139,7 @@ def get_commands_router() -> Router:
                 )
                 and not global_superadmin
             ):
+
                 await message.answer(
                     "⛔ Tu cuenta no está habilitada."
                 )
@@ -1137,17 +1149,11 @@ def get_commands_router() -> Router:
             role = await _effective_role(
                 session,
 
-                bot_id=(
-                    internal_bot_id
-                ),
+                bot_id=internal_bot_id,
 
-                telegram_id=(
-                    tg_user.id
-                ),
+                telegram_id=tg_user.id,
 
-                is_master_bot=(
-                    is_master_bot
-                ),
+                is_master_bot=is_master_bot,
 
                 user=actor,
             )
@@ -1165,9 +1171,7 @@ def get_commands_router() -> Router:
                         .transfer_from_seller(
                             session,
 
-                            bot_id=(
-                                internal_bot_id
-                            ),
+                            bot_id=internal_bot_id,
 
                             seller_telegram_id=(
                                 tg_user.id
@@ -1201,12 +1205,13 @@ def get_commands_router() -> Router:
                     return
 
                 # =========================================
-                # STAFF CON PERMISO
+                # STAFF
                 # =========================================
 
                 if not can_grant_credits(
                     role
                 ):
+
                     await message.answer(
                         "⛔ <b>ACCESO DENEGADO</b>\n\n"
                         "No tienes permisos para "
@@ -1220,9 +1225,7 @@ def get_commands_router() -> Router:
                     .get_user_by_telegram_id(
                         session,
 
-                        bot_id=(
-                            internal_bot_id
-                        ),
+                        bot_id=internal_bot_id,
 
                         telegram_id=(
                             target_telegram_id
@@ -1233,6 +1236,7 @@ def get_commands_router() -> Router:
                 if not _account_operational(
                     target
                 ):
+
                     await message.answer(
                         "⛔ El usuario destino "
                         "no está habilitado."
@@ -1245,9 +1249,7 @@ def get_commands_router() -> Router:
                     .add_credits(
                         session,
 
-                        bot_id=(
-                            internal_bot_id
-                        ),
+                        bot_id=internal_bot_id,
 
                         target_user_id=(
                             target.id
@@ -1259,9 +1261,7 @@ def get_commands_router() -> Router:
                             tg_user.id
                         ),
 
-                        performed_by_role=(
-                            role
-                        ),
+                        performed_by_role=role,
 
                         transaction_type=(
                             "ADMIN_CREDIT_GRANT"
@@ -1318,9 +1318,7 @@ def get_commands_router() -> Router:
         is_master_bot: bool,
     ) -> None:
 
-        tg_user = (
-            message.from_user
-        )
+        tg_user = message.from_user
 
         if tg_user is None:
             return
@@ -1345,6 +1343,7 @@ def get_commands_router() -> Router:
         )
 
         if target_id is None:
+
             await message.answer(
                 "⚠️ Telegram ID inválido."
             )
@@ -1356,22 +1355,17 @@ def get_commands_router() -> Router:
             role = await _effective_role(
                 session,
 
-                bot_id=(
-                    internal_bot_id
-                ),
+                bot_id=internal_bot_id,
 
-                telegram_id=(
-                    tg_user.id
-                ),
+                telegram_id=tg_user.id,
 
-                is_master_bot=(
-                    is_master_bot
-                ),
+                is_master_bot=is_master_bot,
             )
 
             if not can_manage_sellers(
                 role
             ):
+
                 await message.answer(
                     "⛔ <b>ACCESO DENEGADO</b>"
                 )
@@ -1383,9 +1377,7 @@ def get_commands_router() -> Router:
                 await seller_service.assign_seller(
                     session,
 
-                    bot_id=(
-                        internal_bot_id
-                    ),
+                    bot_id=internal_bot_id,
 
                     target_telegram_id=(
                         target_id
@@ -1431,9 +1423,7 @@ def get_commands_router() -> Router:
         is_master_bot: bool,
     ) -> None:
 
-        tg_user = (
-            message.from_user
-        )
+        tg_user = message.from_user
 
         if tg_user is None:
             return
@@ -1458,6 +1448,7 @@ def get_commands_router() -> Router:
         )
 
         if target_id is None:
+
             await message.answer(
                 "⚠️ Telegram ID inválido."
             )
@@ -1469,22 +1460,17 @@ def get_commands_router() -> Router:
             role = await _effective_role(
                 session,
 
-                bot_id=(
-                    internal_bot_id
-                ),
+                bot_id=internal_bot_id,
 
-                telegram_id=(
-                    tg_user.id
-                ),
+                telegram_id=tg_user.id,
 
-                is_master_bot=(
-                    is_master_bot
-                ),
+                is_master_bot=is_master_bot,
             )
 
             if not can_manage_sellers(
                 role
             ):
+
                 await message.answer(
                     "⛔ <b>ACCESO DENEGADO</b>"
                 )
@@ -1496,17 +1482,13 @@ def get_commands_router() -> Router:
                 await seller_service.remove_seller(
                     session,
 
-                    bot_id=(
-                        internal_bot_id
-                    ),
+                    bot_id=internal_bot_id,
 
                     target_telegram_id=(
                         target_id
                     ),
 
-                    removed_by_role=(
-                        role
-                    ),
+                    removed_by_role=role,
                 )
 
             except (
@@ -1544,9 +1526,7 @@ def get_commands_router() -> Router:
         is_master_bot: bool,
     ) -> None:
 
-        tg_user = (
-            message.from_user
-        )
+        tg_user = message.from_user
 
         if tg_user is None:
             return
@@ -1556,22 +1536,17 @@ def get_commands_router() -> Router:
             role = await _effective_role(
                 session,
 
-                bot_id=(
-                    internal_bot_id
-                ),
+                bot_id=internal_bot_id,
 
-                telegram_id=(
-                    tg_user.id
-                ),
+                telegram_id=tg_user.id,
 
-                is_master_bot=(
-                    is_master_bot
-                ),
+                is_master_bot=is_master_bot,
             )
 
             if not can_manage_sellers(
                 role
             ):
+
                 await message.answer(
                     "⛔ <b>ACCESO DENEGADO</b>"
                 )
@@ -1582,10 +1557,7 @@ def get_commands_router() -> Router:
                 await seller_service
                 .list_sellers(
                     session,
-
-                    bot_id=(
-                        internal_bot_id
-                    ),
+                    bot_id=internal_bot_id,
                 )
             )
 
@@ -1638,7 +1610,9 @@ def get_commands_router() -> Router:
             )
 
             await message.answer(
-                "\n".join(lines)
+                "\n".join(
+                    lines
+                )
             )
 
     # =====================================================
@@ -1654,9 +1628,7 @@ def get_commands_router() -> Router:
         is_master_bot: bool,
     ) -> None:
 
-        tg_user = (
-            message.from_user
-        )
+        tg_user = message.from_user
 
         if tg_user is None:
             return
@@ -1689,6 +1661,7 @@ def get_commands_router() -> Router:
         )
 
         if target_id is None:
+
             await message.answer(
                 "⚠️ Telegram ID inválido."
             )
@@ -1701,23 +1674,18 @@ def get_commands_router() -> Router:
                 await _effective_role(
                     session,
 
-                    bot_id=(
-                        internal_bot_id
-                    ),
+                    bot_id=internal_bot_id,
 
-                    telegram_id=(
-                        tg_user.id
-                    ),
+                    telegram_id=tg_user.id,
 
-                    is_master_bot=(
-                        is_master_bot
-                    ),
+                    is_master_bot=is_master_bot,
                 )
             )
 
             if not can_manage_bans(
                 actor_role
             ):
+
                 await message.answer(
                     "⛔ <b>ACCESO DENEGADO</b>"
                 )
@@ -1727,13 +1695,9 @@ def get_commands_router() -> Router:
             target = await _get_user(
                 session,
 
-                bot_id=(
-                    internal_bot_id
-                ),
+                bot_id=internal_bot_id,
 
-                telegram_id=(
-                    target_id
-                ),
+                telegram_id=target_id,
 
                 for_update=True,
             )
@@ -1750,19 +1714,13 @@ def get_commands_router() -> Router:
                 await _target_highest_role(
                     session,
 
-                    bot_id=(
-                        internal_bot_id
-                    ),
+                    bot_id=internal_bot_id,
 
                     target=target,
 
-                    target_telegram_id=(
-                        target_id
-                    ),
+                    target_telegram_id=target_id,
 
-                    is_master_bot=(
-                        is_master_bot
-                    ),
+                    is_master_bot=is_master_bot,
                 )
             )
 
@@ -1770,6 +1728,7 @@ def get_commands_router() -> Router:
                 actor_role,
                 target_role,
             ):
+
                 await message.answer(
                     "⛔ No puedes bloquear a "
                     "un rol igual o superior al tuyo."
@@ -1778,15 +1737,10 @@ def get_commands_router() -> Router:
                 return
 
             target.is_banned = True
+            target.ban_reason = reason[:255]
 
-            target.ban_reason = (
-                reason[:255]
-            )
-
-            target.banned_at = (
-                datetime.now(
-                    timezone.utc
-                )
+            target.banned_at = datetime.now(
+                timezone.utc
             )
 
             try:
@@ -1820,9 +1774,7 @@ def get_commands_router() -> Router:
         is_master_bot: bool,
     ) -> None:
 
-        tg_user = (
-            message.from_user
-        )
+        tg_user = message.from_user
 
         if tg_user is None:
             return
@@ -1847,6 +1799,7 @@ def get_commands_router() -> Router:
         )
 
         if target_id is None:
+
             await message.answer(
                 "⚠️ Telegram ID inválido."
             )
@@ -1859,23 +1812,18 @@ def get_commands_router() -> Router:
                 await _effective_role(
                     session,
 
-                    bot_id=(
-                        internal_bot_id
-                    ),
+                    bot_id=internal_bot_id,
 
-                    telegram_id=(
-                        tg_user.id
-                    ),
+                    telegram_id=tg_user.id,
 
-                    is_master_bot=(
-                        is_master_bot
-                    ),
+                    is_master_bot=is_master_bot,
                 )
             )
 
             if not can_manage_bans(
                 actor_role
             ):
+
                 await message.answer(
                     "⛔ <b>ACCESO DENEGADO</b>"
                 )
@@ -1885,13 +1833,9 @@ def get_commands_router() -> Router:
             target = await _get_user(
                 session,
 
-                bot_id=(
-                    internal_bot_id
-                ),
+                bot_id=internal_bot_id,
 
-                telegram_id=(
-                    target_id
-                ),
+                telegram_id=target_id,
 
                 for_update=True,
             )
@@ -1908,19 +1852,13 @@ def get_commands_router() -> Router:
                 await _target_highest_role(
                     session,
 
-                    bot_id=(
-                        internal_bot_id
-                    ),
+                    bot_id=internal_bot_id,
 
                     target=target,
 
-                    target_telegram_id=(
-                        target_id
-                    ),
+                    target_telegram_id=target_id,
 
-                    is_master_bot=(
-                        is_master_bot
-                    ),
+                    is_master_bot=is_master_bot,
                 )
             )
 
@@ -1928,6 +1866,7 @@ def get_commands_router() -> Router:
                 actor_role,
                 target_role,
             ):
+
                 await message.answer(
                     "⛔ No puedes modificar a "
                     "un rol igual o superior al tuyo."
@@ -1967,9 +1906,7 @@ def get_commands_router() -> Router:
         is_master_bot: bool,
     ) -> None:
 
-        tg_user = (
-            message.from_user
-        )
+        tg_user = message.from_user
 
         if tg_user is None:
             return
@@ -1980,17 +1917,11 @@ def get_commands_router() -> Router:
                 await _effective_role(
                     session,
 
-                    bot_id=(
-                        internal_bot_id
-                    ),
+                    bot_id=internal_bot_id,
 
-                    telegram_id=(
-                        tg_user.id
-                    ),
+                    telegram_id=tg_user.id,
 
-                    is_master_bot=(
-                        is_master_bot
-                    ),
+                    is_master_bot=is_master_bot,
                 )
             )
 
@@ -1998,6 +1929,7 @@ def get_commands_router() -> Router:
                 actor_role,
                 "view_staff",
             ):
+
                 await message.answer(
                     "⛔ <b>ACCESO DENEGADO</b>"
                 )
@@ -2085,7 +2017,9 @@ def get_commands_router() -> Router:
             )
 
             await message.answer(
-                "\n".join(lines)
+                "\n".join(
+                    lines
+                )
             )
 
     # =====================================================
@@ -2101,9 +2035,7 @@ def get_commands_router() -> Router:
         is_master_bot: bool,
     ) -> None:
 
-        tg_user = (
-            message.from_user
-        )
+        tg_user = message.from_user
 
         if tg_user is None:
             return
@@ -2114,23 +2046,18 @@ def get_commands_router() -> Router:
                 await _effective_role(
                     session,
 
-                    bot_id=(
-                        internal_bot_id
-                    ),
+                    bot_id=internal_bot_id,
 
-                    telegram_id=(
-                        tg_user.id
-                    ),
+                    telegram_id=tg_user.id,
 
-                    is_master_bot=(
-                        is_master_bot
-                    ),
+                    is_master_bot=is_master_bot,
                 )
             )
 
             if not can_view_statistics(
                 actor_role
             ):
+
                 await message.answer(
                     "⛔ <b>ACCESO DENEGADO</b>"
                 )
@@ -2234,14 +2161,12 @@ def get_commands_router() -> Router:
         is_master_bot: bool,
     ) -> None:
 
-        tg_user = (
-            message.from_user
-        )
+        tg_user = message.from_user
 
         if tg_user is None:
             return
 
-        # Admite nombres de plan con espacios.
+        # Admite nombres con espacios:
         #
         # /sub 123456789 30 PREMIUM
         # /sub 123456789 30 PREMIUM PLUS
@@ -2318,17 +2243,11 @@ def get_commands_router() -> Router:
             role = await _effective_role(
                 session,
 
-                bot_id=(
-                    internal_bot_id
-                ),
+                bot_id=internal_bot_id,
 
-                telegram_id=(
-                    tg_user.id
-                ),
+                telegram_id=tg_user.id,
 
-                is_master_bot=(
-                    is_master_bot
-                ),
+                is_master_bot=is_master_bot,
             )
 
             if not can_use_sub(
@@ -2351,9 +2270,7 @@ def get_commands_router() -> Router:
                     .add_subscription(
                         session,
 
-                        bot_id=(
-                            internal_bot_id
-                        ),
+                        bot_id=internal_bot_id,
 
                         target_telegram_id=(
                             target_telegram_id
@@ -2367,9 +2284,7 @@ def get_commands_router() -> Router:
                             tg_user.id
                         ),
 
-                        activated_by_role=(
-                            role
-                        ),
+                        activated_by_role=role,
                     )
                 )
 
@@ -2378,9 +2293,7 @@ def get_commands_router() -> Router:
                     .get_subscription_status(
                         session,
 
-                        bot_id=(
-                            internal_bot_id
-                        ),
+                        bot_id=internal_bot_id,
 
                         telegram_id=(
                             target_telegram_id
@@ -2401,7 +2314,6 @@ def get_commands_router() -> Router:
 
                 await message.answer(
                     "⚠️ <b>ERROR DE SUSCRIPCIÓN</b>\n\n"
-
                     "No fue posible completar "
                     "la operación."
                 )
@@ -2421,6 +2333,7 @@ def get_commands_router() -> Router:
                 )
 
             else:
+
                 expiration_text = (
                     "No disponible"
                 )
@@ -2466,9 +2379,7 @@ def get_commands_router() -> Router:
         is_master_bot: bool,
     ) -> None:
 
-        tg_user = (
-            message.from_user
-        )
+        tg_user = message.from_user
 
         if tg_user is None:
             return
@@ -2478,17 +2389,11 @@ def get_commands_router() -> Router:
             role = await _effective_role(
                 session,
 
-                bot_id=(
-                    internal_bot_id
-                ),
+                bot_id=internal_bot_id,
 
-                telegram_id=(
-                    tg_user.id
-                ),
+                telegram_id=tg_user.id,
 
-                is_master_bot=(
-                    is_master_bot
-                ),
+                is_master_bot=is_master_bot,
             )
 
             if not has_permission(
